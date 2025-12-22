@@ -4,6 +4,7 @@ import { BackupSelector } from './pages/BackupSelector';
 import { PasswordPrompt } from './pages/PasswordPrompt';
 import { Explorer } from './pages/Explorer';
 import type { BackupSummary } from './lib/api';
+import appLogo from './assets/logo.svg';
 import './AppNew.css';
 
 type AppState = 'token-input' | 'backup-selector' | 'password-prompt' | 'explorer';
@@ -124,8 +125,10 @@ function AppNew() {
       {(appState === 'backup-selector' || appState === 'password-prompt' || appState === 'explorer') && (
         <div className="app-header">
           <div className="header-left">
-            <div className="app-icon">📱</div>
-            <RainbowText text="iOS Backup Explorer" />
+            <div className="app-icon">
+              <img src={appLogo} alt="Apple Juicer logo" />
+            </div>
+            <RainbowText text="apple-juicer" />
           </div>
           <div className="header-right">
             <Breadcrumbs currentState={appState} onNavigate={handleNavigate} />
