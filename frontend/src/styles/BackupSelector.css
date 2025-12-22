@@ -1,0 +1,316 @@
+.backup-selector {
+  min-height: 100vh;
+  background: linear-gradient(180deg, rgba(15, 17, 20, 0.8), rgba(11, 12, 14, 0.95));
+  padding: 2rem;
+}
+
+.backup-selector-header {
+  max-width: 1200px;
+  margin: 0 auto 3rem;
+  text-align: center;
+  color: #f5f6fa;
+}
+
+.backup-selector-header h1 {
+  font-size: 2.5rem;
+  margin: 0 0 0.5rem;
+  font-weight: 700;
+}
+
+.backup-selector-header p {
+  font-size: 1.1rem;
+  margin: 0 0 1.5rem;
+  color: rgba(245, 246, 250, 0.65);
+}
+
+.refresh-btn {
+  background: rgba(255, 139, 60, 0.15);
+  color: #ff8b3c;
+  border: 1px solid rgba(255, 139, 60, 0.3);
+  padding: 0.75rem 1.5rem;
+  border-radius: 10px;
+  font-size: 1rem;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.refresh-btn:hover:not(:disabled) {
+  background: rgba(255, 139, 60, 0.25);
+  border-color: rgba(255, 139, 60, 0.5);
+  transform: translateY(-2px);
+}
+
+.refresh-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.error-message {
+  max-width: 1200px;
+  margin: 0 auto 2rem;
+  padding: 1rem;
+  background: rgba(220, 53, 69, 0.15);
+  color: #ff6b6b;
+  border-radius: 10px;
+  border-left: 4px solid #ff6b6b;
+}
+
+.loading,
+.no-backups {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 3rem;
+  text-align: center;
+  background: rgba(18, 20, 26, 0.85);
+  border: 1px solid rgba(255, 139, 60, 0.1);
+  border-radius: 18px;
+  color: rgba(245, 246, 250, 0.65);
+  font-size: 1.1rem;
+}
+
+.backups-grid {
+  max-width: 1200px;
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 2rem;
+}
+
+.backup-card {
+  background: rgba(18, 20, 26, 0.85);
+  border: 1px solid rgba(255, 139, 60, 0.1);
+  border-radius: 18px;
+  padding: 1.5rem;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+}
+
+.backup-card:hover {
+  transform: translateY(-4px);
+  border-color: rgba(255, 139, 60, 0.3);
+  box-shadow: 0 12px 24px rgba(255, 139, 60, 0.15);
+}
+
+.backup-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: start;
+  margin-bottom: 1rem;
+  gap: 1rem;
+}
+
+.backup-title-section {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.backup-card-header h3 {
+  margin: 0;
+  font-size: 1.3rem;
+  color: #f5f6fa;
+}
+
+.backup-folder-name {
+  font-size: 0.75rem;
+  color: rgba(245, 246, 250, 0.5);
+  font-family: monospace;
+}
+
+.status-badge {
+  padding: 0.4rem 0.8rem;
+  border-radius: 20px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.status-pending {
+  background: rgba(100, 150, 255, 0.2);
+  color: #64b5ff;
+}
+
+.status-decrypting {
+  background: rgba(255, 139, 60, 0.2);
+  color: #ffb347;
+}
+
+.status-decrypted {
+  background: rgba(76, 175, 80, 0.2);
+  color: #81c784;
+}
+
+.status-failed {
+  background: rgba(244, 67, 54, 0.2);
+  color: #ef5350;
+}
+
+.backup-card-details {
+  margin-bottom: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.detail {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.95rem;
+  color: rgba(245, 246, 250, 0.65);
+}
+
+.detail .label {
+  font-weight: 600;
+  color: #f5f6fa;
+}
+
+.detail .value {
+  color: rgba(245, 246, 250, 0.65);
+  text-align: right;
+}
+
+.backup-card-footer {
+  padding-top: 1rem;
+  border-top: 1px solid rgba(255, 139, 60, 0.1);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.encryption-status {
+  font-size: 0.9rem;
+  color: rgba(245, 246, 250, 0.65);
+}
+
+.backup-actions {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.btn-redecrypt {
+  background: rgba(255, 139, 60, 0.15);
+  color: #ff8b3c;
+  border: 1px solid rgba(255, 139, 60, 0.3);
+  padding: 0.5rem 1rem;
+  border-radius: 8px;
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: all 0.2s;
+  font-weight: 600;
+}
+
+.btn-redecrypt:hover:not(:disabled) {
+  background: rgba(255, 139, 60, 0.25);
+  border-color: rgba(255, 139, 60, 0.5);
+}
+
+.btn-redecrypt:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.btn-delete-data {
+  background: rgba(220, 53, 69, 0.15);
+  color: #ff6b6b;
+  border: 1px solid rgba(220, 53, 69, 0.3);
+  padding: 0.5rem 1rem;
+  border-radius: 8px;
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: all 0.2s;
+  font-weight: 600;
+}
+
+.btn-delete-data:hover:not(:disabled) {
+  background: rgba(220, 53, 69, 0.25);
+  border-color: rgba(220, 53, 69, 0.5);
+}
+
+.btn-delete-data:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2000;
+  backdrop-filter: blur(4px);
+}
+
+.modal-content {
+  background: rgba(18, 20, 26, 0.95);
+  border: 1px solid rgba(255, 139, 60, 0.2);
+  border-radius: 18px;
+  padding: 2rem;
+  max-width: 500px;
+  width: 90%;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+}
+
+.modal-content h3 {
+  margin: 0 0 1rem;
+  font-size: 1.5rem;
+  color: #f5f6fa;
+}
+
+.modal-content p {
+  margin: 0 0 1rem;
+  color: rgba(245, 246, 250, 0.75);
+  line-height: 1.6;
+}
+
+.modal-content p strong {
+  color: #ff6b6b;
+}
+
+.modal-actions {
+  display: flex;
+  gap: 1rem;
+  justify-content: flex-end;
+  margin-top: 2rem;
+}
+
+.btn-cancel {
+  background: rgba(255, 139, 60, 0.15);
+  color: #ff8b3c;
+  border: 1px solid rgba(255, 139, 60, 0.3);
+  padding: 0.75rem 1.5rem;
+  border-radius: 10px;
+  font-size: 1rem;
+  cursor: pointer;
+  transition: all 0.2s;
+  font-weight: 600;
+}
+
+.btn-cancel:hover {
+  background: rgba(255, 139, 60, 0.25);
+  border-color: rgba(255, 139, 60, 0.5);
+}
+
+.btn-delete {
+  background: rgba(220, 53, 69, 0.2);
+  color: #ff6b6b;
+  border: 1px solid rgba(220, 53, 69, 0.4);
+  padding: 0.75rem 1.5rem;
+  border-radius: 10px;
+  font-size: 1rem;
+  cursor: pointer;
+  transition: all 0.2s;
+  font-weight: 600;
+}
+
+.btn-delete:hover {
+  background: rgba(220, 53, 69, 0.3);
+  border-color: rgba(220, 53, 69, 0.6);
+}

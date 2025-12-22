@@ -1,0 +1,743 @@
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import './App.css';
+import { api, type BackupSummary, type ManifestEntry } from './lib/api';
+import { useLocalStorage } from './lib/useLocalStorage';
+import {
+  STATUS_LABELS,
+  STATUS_TONE,
+  type ArtifactView,
+  type BackupSession,
+  type BackupStatus,
+  type WhatsAppChat,
+  type WhatsAppMessage,
+} from './lib/types';
+
+const DEFAULT_FILE_LIMIT = 200;
+
+const artifactTabs: { id: ArtifactView; label: string; description: string }[] = [
+  { id: 'files', label: 'Manifest', description: 'Browse manifest entries and decrypt files securely.' },
+  { id: 'photos', label: 'Photos', description: 'Photos.sqlite timeline (coming soon).' },
+  { id: 'whatsapp', label: 'WhatsApp', description: 'Explore parsed chats and decrypted WhatsApp messages.' },
+  { id: 'messages', label: 'Messages', description: 'iMessage/SMS conversations (coming soon).' },
+  { id: 'notes', label: 'Notes', description: 'Notes database (coming soon).' },
+  { id: 'calendar', label: 'Calendar', description: 'Calendar events (coming soon).' },
+  { id: 'contacts', label: 'Contacts', description: 'AddressBook entries (coming soon).' },
+];
+
+function App() {
+  const [apiToken, setApiToken] = useLocalStorage<string>('ibe.apiToken', '');
+  const [backups, setBackups] = useState<BackupSummary[]>([]);
+  const [backupsLoading, setBackupsLoading] = useState(false);
+  const [selectedBackupId, setSelectedBackupId] = useState<string | null>(null);
+  const [sessionMap, setSessionMap] = useState<Record<string, BackupSession>>({});
+  const [passwordInput, setPasswordInput] = useState('');
+  const [statusMessage, setStatusMessage] = useState<string | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  const [baseDirectory, setBaseDirectory] = useState<string | null>(null);
+  const [domains, setDomains] = useState<string[]>([]);
+  const [domainLoading, setDomainLoading] = useState(false);
+  const [selectedDomain, setSelectedDomain] = useState<string | null>(null);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [files, setFiles] = useState<ManifestEntry[]>([]);
+  const [filesLoading, setFilesLoading] = useState(false);
+
+  const [whatsappChats, setWhatsAppChats] = useState<WhatsAppChat[]>([]);
+  const [whatsappChatsLoading, setWhatsAppChatsLoading] = useState(false);
+  const [selectedWhatsAppChat, setSelectedWhatsAppChat] = useState<string | null>(null);
+  const [whatsappMessages, setWhatsAppMessages] = useState<WhatsAppMessage[]>([]);
+  const [whatsappMessagesLoading, setWhatsAppMessagesLoading] = useState(false);
+
+  const [activeView, setActiveView] = useState<ArtifactView>('files');
+  const initialTokenRef = useRef(apiToken);
+  const autoRefreshedInitialTokenRef = useRef(false);
+
+  const selectedBackup = useMemo(
+    () => backups.find((backup) => backup.id === selectedBackupId) ?? null,
+    [backups, selectedBackupId],
+  );
+
+  const selectedWhatsAppChatData = useMemo(
+    () => whatsappChats.find((chat) => chat.chat_guid === selectedWhatsAppChat) ?? null,
+    [whatsappChats, selectedWhatsAppChat],
+  );
+
+  const activeSession = selectedBackupId ? sessionMap[selectedBackupId] : undefined;
+  const canInteract = Boolean(apiToken);
+
+  useEffect(() => {
+    if (!canInteract) {
+      setBackups([]);
+      setSelectedBackupId(null);
+      autoRefreshedInitialTokenRef.current = false;
+      return;
+    }
+
+    const isInitialToken = apiToken === initialTokenRef.current;
+    if (isInitialToken && !autoRefreshedInitialTokenRef.current) {
+      autoRefreshedInitialTokenRef.current = true;
+      void refreshBackups();
+    }
+  }, [apiToken, canInteract]);
+
+  useEffect(() => {
+    if (!selectedBackupId || !activeSession || !canInteract) {
+      setDomains([]);
+      setSelectedDomain(null);
+      setFiles([]);
+      return;
+    }
+    void fetchDomains();
+  }, [selectedBackupId, activeSession?.token, canInteract]);
+
+  useEffect(() => {
+    if (!selectedBackupId || !activeSession || !canInteract) {
+      setFiles([]);
+      return;
+    }
+    void fetchFiles();
+  }, [selectedBackupId, selectedDomain, searchTerm, activeSession?.token, canInteract]);
+
+  useEffect(() => {
+    setSelectedWhatsAppChat(null);
+    setWhatsAppChats([]);
+    setWhatsAppMessages([]);
+  }, [selectedBackupId]);
+
+  useEffect(() => {
+    if (!activeSession?.token) {
+      setSelectedWhatsAppChat(null);
+      setWhatsAppChats([]);
+      setWhatsAppMessages([]);
+    }
+  }, [activeSession?.token]);
+
+  useEffect(() => {
+    setActiveView('files');
+  }, [selectedBackupId]);
+
+  const refreshBackups = async () => {
+    setBackupsLoading(true);
+    setErrorMessage(null);
+    try {
+      const response = await api.refreshBackups(apiToken);
+      setBackups(response.backups);
+      setBaseDirectory(response.base_directory ?? null);
+      if (!selectedBackupId && response.backups.length) {
+        setSelectedBackupId(response.backups[0].id);
+      } else if (
+        selectedBackupId &&
+        !response.backups.some((backup) => backup.id === selectedBackupId)
+      ) {
+        setSelectedBackupId(response.backups[0]?.id ?? null);
+      }
+    } catch (error) {
+      setErrorMessage((error as Error).message);
+    } finally {
+      setBackupsLoading(false);
+    }
+  };
+
+  const fetchDomains = async () => {
+    if (!selectedBackupId || !activeSession) return;
+    setDomainLoading(true);
+    try {
+      const response = await api.listDomains(selectedBackupId, apiToken, activeSession.token);
+      setDomains(response.domains);
+      setSelectedDomain((current) => current ?? response.domains[0] ?? null);
+    } catch (error) {
+      setErrorMessage((error as Error).message);
+    } finally {
+      setDomainLoading(false);
+    }
+  };
+
+  const fetchFiles = async () => {
+    if (!selectedBackupId || !activeSession) return;
+    setFilesLoading(true);
+    try {
+      const response = await api.listFiles(selectedBackupId, apiToken, activeSession.token, {
+        domain: selectedDomain ?? undefined,
+        path_like: searchTerm ? `%${searchTerm}%` : undefined,
+        limit: DEFAULT_FILE_LIMIT,
+      });
+      setFiles(response.items);
+    } catch (error) {
+      setErrorMessage((error as Error).message);
+    } finally {
+      setFilesLoading(false);
+    }
+  };
+
+  const fetchWhatsAppChats = useCallback(async () => {
+    if (!selectedBackupId || !activeSession) return;
+    setWhatsAppChatsLoading(true);
+    try {
+      const response = await api.listWhatsAppChats(selectedBackupId, apiToken, activeSession.token);
+      setWhatsAppChats(response.items);
+      setSelectedWhatsAppChat((current) => current ?? response.items[0]?.chat_guid ?? null);
+    } catch (error) {
+      setErrorMessage((error as Error).message);
+    } finally {
+      setWhatsAppChatsLoading(false);
+    }
+  }, [selectedBackupId, activeSession?.token, apiToken]);
+
+  const fetchWhatsAppMessages = useCallback(
+    async (chatGuid: string) => {
+      if (!selectedBackupId || !activeSession || !chatGuid) return;
+      setWhatsAppMessagesLoading(true);
+      try {
+        const response = await api.listWhatsAppMessages(selectedBackupId, chatGuid, apiToken, activeSession.token);
+        setWhatsAppMessages(response.messages);
+        setWhatsAppChats((prev) =>
+          prev.map((chat) => (chat.chat_guid === response.chat.chat_guid ? response.chat : chat)),
+        );
+      } catch (error) {
+        setErrorMessage((error as Error).message);
+      } finally {
+        setWhatsAppMessagesLoading(false);
+      }
+    },
+    [selectedBackupId, activeSession?.token, apiToken],
+  );
+
+  useEffect(() => {
+    if (activeView !== 'whatsapp') return;
+    if (!selectedBackupId || !activeSession) return;
+    void fetchWhatsAppChats();
+  }, [activeView, selectedBackupId, activeSession?.token, fetchWhatsAppChats]);
+
+  useEffect(() => {
+    if (activeView !== 'whatsapp') return;
+    if (!selectedWhatsAppChat) {
+      setWhatsAppMessages([]);
+      return;
+    }
+    void fetchWhatsAppMessages(selectedWhatsAppChat);
+  }, [activeView, selectedWhatsAppChat, fetchWhatsAppMessages]);
+
+  const handleUnlock = async () => {
+    if (!selectedBackupId || !selectedBackup || !passwordInput) return;
+    setStatusMessage('Unlocking backup…');
+    setErrorMessage(null);
+    try {
+      const response = await api.unlockBackup(selectedBackupId, passwordInput, apiToken);
+      const expiresAt = Date.now() + response.ttl_seconds * 1000;
+      setSessionMap((prev) => ({
+        ...prev,
+        [selectedBackupId]: {
+          backupId: selectedBackupId,
+          token: response.session_token,
+          expiresAt,
+        },
+      }));
+      setBackups((prev) =>
+        prev.map((backup) => (backup.id === selectedBackupId ? { ...backup, status: 'unlocked' } : backup)),
+      );
+      setPasswordInput('');
+      setStatusMessage('Backup unlocked. Session ready.');
+    } catch (error) {
+      setErrorMessage((error as Error).message);
+    } finally {
+      setTimeout(() => setStatusMessage(null), 2500);
+    }
+  };
+
+  const handleLock = async () => {
+    if (!selectedBackupId) return;
+    const session = sessionMap[selectedBackupId];
+    if (!session) return;
+    setStatusMessage('Revoking session…');
+    try {
+      await api.lockBackup(selectedBackupId, apiToken, session.token);
+    } catch (error) {
+      setErrorMessage((error as Error).message);
+    } finally {
+      setSessionMap((prev) => {
+        const copy = { ...prev };
+        delete copy[selectedBackupId];
+        return copy;
+      });
+      setBackups((prev) =>
+        prev.map((backup) =>
+          backup.id === selectedBackupId && backup.status === 'unlocked'
+            ? { ...backup, status: 'locked' }
+            : backup,
+        ),
+      );
+      setStatusMessage('Session revoked.');
+      setTimeout(() => setStatusMessage(null), 2000);
+    }
+  };
+
+  const handleDownload = async (fileId: string, relativePath: string) => {
+    if (!selectedBackupId) return;
+    const session = sessionMap[selectedBackupId];
+    if (!session) return;
+    setStatusMessage(`Preparing download: ${relativePath}`);
+    try {
+      const response = await api.downloadFile(selectedBackupId, fileId, apiToken, session.token);
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement('a');
+      anchor.href = url;
+      anchor.download = relativePath.split('/').pop() ?? fileId;
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      URL.revokeObjectURL(url);
+      setStatusMessage('Download started.');
+    } catch (error) {
+      setErrorMessage((error as Error).message);
+    } finally {
+      setTimeout(() => setStatusMessage(null), 2000);
+    }
+  };
+
+  const renderActiveView = () => {
+    if (!activeSession) {
+      return (
+        <div className="empty detail">
+          <p>Enter the backup password to browse artifacts.</p>
+        </div>
+      );
+    }
+
+    if (activeView === 'whatsapp') {
+      return (
+        <div className="whatsapp-panel">
+          <div className="panel-heading">
+            <div>
+              <h3>WhatsApp Explorer</h3>
+              <p className="panel-subtitle">Chats parsed from ZWACHATSESSION with decrypted message payloads.</p>
+            </div>
+            <div className="action-row">
+              <button className="secondary ghost" disabled={whatsappChatsLoading} onClick={fetchWhatsAppChats}>
+                {whatsappChatsLoading ? 'Refreshing…' : 'Refresh chats'}
+              </button>
+              <button
+                className="secondary ghost"
+                disabled={!selectedWhatsAppChat || whatsappMessagesLoading}
+                onClick={() => selectedWhatsAppChat && fetchWhatsAppMessages(selectedWhatsAppChat)}
+              >
+                {whatsappMessagesLoading ? 'Loading…' : 'Reload messages'}
+              </button>
+            </div>
+          </div>
+          <div className="whatsapp-grid">
+            <aside className="whatsapp-chats">
+              {whatsappChatsLoading ? (
+                <div className="empty table">
+                  <p>Scanning chats…</p>
+                </div>
+              ) : whatsappChats.length === 0 ? (
+                <div className="empty table">
+                  <p>No WhatsApp chats indexed for this backup.</p>
+                </div>
+              ) : (
+                <div className="chat-list">
+                  {whatsappChats.map((chat) => (
+                    <button
+                      key={chat.chat_guid}
+                      className={`chat-row ${selectedWhatsAppChat === chat.chat_guid ? 'active' : ''}`}
+                      onClick={() => setSelectedWhatsAppChat(chat.chat_guid)}
+                    >
+                      <div>
+                        <p className="chat-title">{chat.title ?? chat.chat_guid}</p>
+                        <p className="chat-guid">{chat.chat_guid}</p>
+                      </div>
+                      <p className="chat-meta">
+                        {chat.participant_count ? `${chat.participant_count} participants` : '1:1'}
+                        <span>{formatDateTime(chat.last_message_at)}</span>
+                      </p>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </aside>
+            <section className="whatsapp-messages">
+              {!selectedWhatsAppChatData ? (
+                <div className="empty detail">
+                  <p>Select a WhatsApp chat to load its timeline.</p>
+                </div>
+              ) : (
+                <>
+                  <div className="chat-summary">
+                    <div>
+                      <h3>{selectedWhatsAppChatData.title ?? selectedWhatsAppChatData.chat_guid}</h3>
+                      <p className="chat-guid">{selectedWhatsAppChatData.chat_guid}</p>
+                    </div>
+                    <div className="chat-summary-meta">
+                      <span>
+                        Participants: {selectedWhatsAppChatData.participant_count ?? (selectedWhatsAppChatData.metadata ? 'n/a' : 'n/a')}
+                      </span>
+                      <span>Last message {formatDateTime(selectedWhatsAppChatData.last_message_at)}</span>
+                    </div>
+                  </div>
+                  <div className="message-scroll">
+                    {whatsappMessagesLoading ? (
+                      <div className="empty table">
+                        <p>Loading chat timeline…</p>
+                      </div>
+                    ) : whatsappMessages.length === 0 ? (
+                      <div className="empty table">
+                        <p>No parsed messages for this chat.</p>
+                      </div>
+                    ) : (
+                      whatsappMessages.map((message) => (
+                        <div
+                          key={message.message_id}
+                          className={`message-bubble ${message.is_from_me ? 'outgoing' : 'incoming'}`}
+                        >
+                          <div className="bubble-meta">
+                            <span>{message.is_from_me ? 'Me' : message.sender ?? 'Unknown sender'}</span>
+                            <span>
+                              {formatDateTime(message.sent_at, {
+                                month: 'short',
+                                day: 'numeric',
+                                hour: '2-digit',
+                                minute: '2-digit',
+                              })}
+                            </span>
+                          </div>
+                          <p className="bubble-body">
+                            {message.body?.trim() ? message.body : <span className="muted">No text payload</span>}
+                          </p>
+                          <div className="bubble-tags">
+                            {message.message_type && <span className="tag">{message.message_type}</span>}
+                            {message.has_attachments && <span className="tag attachment">Attachment</span>}
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </>
+              )}
+            </section>
+          </div>
+        </div>
+      );
+    }
+
+    if (activeView !== 'files') {
+      const current = artifactTabs.find((tab) => tab.id === activeView);
+      return (
+        <div className="empty detail">
+          <p>{current?.label ?? 'Artifact'} view coming soon.</p>
+          <p className="hint">Backend parsing endpoints will populate this view in a future revision.</p>
+        </div>
+      );
+    }
+
+    return (
+      <div className="browser-panel">
+        <div className="panel-heading">
+          <div>
+            <h3>Manifest Browser</h3>
+            <p className="panel-subtitle">Browse manifest entries and decrypt files via the server worker.</p>
+          </div>
+          <button className="secondary ghost" disabled={filesLoading} onClick={fetchFiles}>
+            {filesLoading ? 'Loading…' : 'Refresh'}
+          </button>
+        </div>
+
+        <div className="controls-row">
+          <label>
+            Domain
+            <select
+              value={selectedDomain ?? ''}
+              onChange={(event) => setSelectedDomain(event.target.value || null)}
+              disabled={domainLoading}
+            >
+              <option value="">All domains</option>
+              {domains.map((domain) => (
+                <option key={domain} value={domain}>
+                  {domain}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            Path filter
+            <input
+              type="search"
+              placeholder="Library/SMS/sms.db"
+              value={searchTerm}
+              onChange={(event) => setSearchTerm(event.target.value)}
+            />
+          </label>
+        </div>
+
+        <div className="table-shell">
+          {filesLoading ? (
+            <div className="empty table">
+              <p>Loading manifest entries…</p>
+            </div>
+          ) : files.length === 0 ? (
+            <div className="empty table">
+              <p>No manifest rows match your filters.</p>
+            </div>
+          ) : (
+            <table>
+              <thead>
+                <tr>
+                  <th>Domain</th>
+                  <th>Relative path</th>
+                  <th>Size</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                {files.map((file) => (
+                  <tr key={file.file_id}>
+                    <td>{file.domain}</td>
+                    <td>{file.relative_path}</td>
+                    <td>{file.size ? formatBytes(file.size) : '—'}</td>
+                    <td>
+                      <button className="ghost" onClick={() => handleDownload(file.file_id, file.relative_path)}>
+                        Download
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      </div>
+    );
+  };
+
+  return (
+    <div className="app-shell">
+      <header className="app-header">
+        <div>
+          <h1>iOS Backup Explorer</h1>
+          {baseDirectory && (
+            <p className="subtitle">
+              Host backup directory: <code>{baseDirectory}</code>
+            </p>
+          )}
+        </div>
+        <div className="token-group">
+          <label htmlFor="api-token">API Token</label>
+          <div className="token-input-row">
+            <input
+              id="api-token"
+              type="password"
+              value={apiToken}
+              placeholder="Enter server token"
+              onChange={(event) => setApiToken(event.target.value)}
+            />
+            <button className="secondary ghost" onClick={refreshBackups} disabled={!canInteract || backupsLoading}>
+              Refresh
+            </button>
+          </div>
+          {!canInteract && <p className="hint">Provide a token to begin indexing available backups.</p>}
+        </div>
+      </header>
+
+      {statusMessage && <div className="status-banner">{statusMessage}</div>}
+      {errorMessage && <div className="status-banner error">{errorMessage}</div>}
+
+      <section className="content-grid">
+        <aside className="backups-panel">
+          <div className="panel-heading">
+            <div>
+              <h2>Backups</h2>
+              {baseDirectory && (
+                <p className="panel-subtitle">
+                  Host path: <code>{baseDirectory}</code>
+                </p>
+              )}
+            </div>
+            <button className="secondary" onClick={refreshBackups} disabled={!canInteract || backupsLoading}>
+              {backupsLoading ? 'Scanning…' : 'Scan'}
+            </button>
+          </div>
+          <div className="backup-list">
+            {backups.length === 0 && (
+              <div className="empty">
+                <p>No backups found yet.</p>
+                <p className="hint">Ensure the server path is populated and token is valid.</p>
+              </div>
+            )}
+            {backups.map((backup) => (
+              <button
+                key={backup.id}
+                className={`backup-card ${selectedBackupId === backup.id ? 'active' : ''}`}
+                onClick={() => setSelectedBackupId(backup.id)}
+              >
+                <div className="card-header">
+                  <span className="device-name">{backup.display_name}</span>
+                  {renderStatusPill(backup.status)}
+                </div>
+                <div className="card-meta">
+                  <span>{backup.device_name ?? 'Unknown device'}</span>
+                  <span>iOS {backup.product_version ?? '—'}</span>
+                </div>
+                <div className="card-footer">
+                  <span>{backup.is_encrypted ? 'Encrypted' : 'Not encrypted'}</span>
+                  {backup.last_indexed_at && (
+                    <span>
+                      Indexed {new Date(backup.last_indexed_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+                    </span>
+                  )}
+                </div>
+                <div className="card-stats">
+                  <div>
+                    <p className="label">Size</p>
+                    <p className="stat-value">{formatBytes(backup.size_bytes)}</p>
+                  </div>
+                  <div>
+                    <p className="label">Backup date</p>
+                    <p className="stat-value">{formatBackupDate(backup.last_modified_at)}</p>
+                  </div>
+                </div>
+                <p className="card-id">
+                  <span>ID</span>
+                  <code>{backup.id}</code>
+                </p>
+              </button>
+            ))}
+          </div>
+        </aside>
+
+        <section className="detail-panel">
+          {!selectedBackup && (
+            <div className="empty detail">
+              <p>Select a backup to inspect</p>
+              <p className="hint">Unlock encrypted backups to reveal manifests and artifacts.</p>
+            </div>
+          )}
+          {selectedBackup && (
+            <>
+              <div className="detail-header">
+                <div className="detail-heading">
+                  <h2>{selectedBackup.display_name}</h2>
+                  <p className="backup-id">
+                    <span>ID</span>
+                    <code>{selectedBackup.id}</code>
+                  </p>
+                  <p className="subtitle">
+                    {selectedBackup.device_name ?? 'Unknown device'} • iOS {selectedBackup.product_version ?? '—'}
+                  </p>
+                  <div className="detail-stats">
+                    <span>{formatBytes(selectedBackup.size_bytes)}</span>
+                    <span>{formatBackupDate(selectedBackup.last_modified_at)}</span>
+                  </div>
+                </div>
+                <div className="status-card">
+                  <div className="status-meta">
+                    {renderStatusPill(selectedBackup.status, true)}
+                    <span className={`encryption-tag ${selectedBackup.is_encrypted ? 'encrypted' : 'plain'}`}>
+                      {selectedBackup.is_encrypted ? 'Encrypted backup' : 'Plain backup'}
+                    </span>
+                  </div>
+                  {activeSession ? (
+                    <div className="session-active">
+                      <div>
+                        <p className="label">Session active</p>
+                        <p className="hint">
+                          Expires {new Date(activeSession.expiresAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        </p>
+                      </div>
+                      <button className="ghost danger" onClick={handleLock}>
+                        Revoke
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="session-form">
+                      <label className="label" htmlFor="backup-password">
+                        Backup password
+                      </label>
+                      <div className="session-input-row">
+                        <input
+                          id="backup-password"
+                          type="password"
+                          placeholder="Backup password"
+                          value={passwordInput}
+                          onChange={(event) => setPasswordInput(event.target.value)}
+                        />
+                        <button className="primary" onClick={handleUnlock} disabled={!passwordInput}>
+                          Unlock
+                        </button>
+                      </div>
+                      <p className="hint">Provide the Finder/iTunes password to unlock manifests for this session.</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="tabs-panel">
+                <div className="tabs-row">
+                  {artifactTabs.map((tab) => (
+                    <button
+                      key={tab.id}
+                      className={`tab-button ${activeView === tab.id ? 'active' : ''}`}
+                      onClick={() => setActiveView(tab.id)}
+                    >
+                      {tab.label}
+                    </button>
+                  ))}
+                </div>
+                <p className="hint">
+                  {artifactTabs.find((tab) => tab.id === activeView)?.description ?? 'Select an artifact tab to view its data.'}
+                </p>
+              </div>
+
+              {renderActiveView()}
+            </>
+          )}
+        </section>
+      </section>
+      <footer className="app-footer">
+        <span>iOS Backup Explorer — self-hosted tooling for inspecting encrypted Finder/iTunes archives.</span>
+        <a href="https://github.com/giovi321/ios-backup-explorer" target="_blank" rel="noreferrer">
+          View on GitHub
+        </a>
+      </footer>
+    </div>
+  );
+}
+
+function renderStatusPill(status: BackupStatus, emphasis = false) {
+  const tone = STATUS_TONE[status];
+  return (
+    <span className={`status-pill${emphasis ? ' emphasis' : ''}`} style={{ backgroundColor: tone.bg, color: tone.text }}>
+      {STATUS_LABELS[status]}
+    </span>
+  );
+}
+
+function formatBytes(bytes: number | null | undefined) {
+  if (!Number.isFinite(bytes ?? NaN) || (bytes ?? 0) <= 0) return '—';
+  const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+  let value = bytes as number;
+  let unitIndex = 0;
+  while (value >= 1024 && unitIndex < units.length - 1) {
+    value /= 1024;
+    unitIndex += 1;
+  }
+  return `${value.toFixed(1)} ${units[unitIndex]}`;
+}
+
+function formatBackupDate(date: string | null | undefined) {
+  if (!date) return '—';
+  const parsed = new Date(date);
+  if (Number.isNaN(parsed.getTime())) return '—';
+  return parsed.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+}
+
+function formatDateTime(
+  value: string | null | undefined,
+  options: Intl.DateTimeFormatOptions = { dateStyle: 'medium', timeStyle: 'short' },
+) {
+  if (!value) return '—';
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return '—';
+  return parsed.toLocaleString(undefined, options);
+}
+
+export default App;

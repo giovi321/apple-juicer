@@ -1,0 +1,44 @@
+site_name: Apple Juicer
+site_description: Web-based tool for extracting and analyzing data from iOS (Finder/iTunes) backups with FastAPI, RQ, and React.
+site_url: https://github.com/giovi321/apple-juicer
+repo_url: https://github.com/giovi321/apple-juicer
+repo_name: giovi321/apple-juicer
+
+theme:
+  name: material
+  features:
+    - navigation.sections
+    - navigation.tracking
+    - navigation.expand
+    - content.code.copy
+    - toc.integrate
+  language: en
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - def_list
+  - footnotes
+  - md_in_html
+  - toc:
+      permalink: true
+
+nav:
+  - Overview: index.md
+  - Quickstart:
+      - Quick Start Guide: guides/quickstart.md
+      - Local Development: guides/local-development.md
+      - Docker Compose: guides/docker-compose.md
+  - Architecture:
+      - System Overview: architecture/overview.md
+      - Backend API: architecture/backend.md
+      - Worker Pipeline: architecture/worker.md
+      - Frontend UI: architecture/frontend.md
+      - Data Storage: architecture/storage.md
+  - Operations:
+      - Configuration: operations/configuration.md
+      - Tasks & Workflows: operations/tasks.md
+      - Troubleshooting: operations/troubleshooting.md
+  - Reference:
+      - API Surface: reference/api.md
+      - Directory Layout: reference/directory-layout.md

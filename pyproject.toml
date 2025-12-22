@@ -1,0 +1,57 @@
+[project]
+name = "apple-juicer"
+version = "0.1.0"
+description = "Web-based tool for extracting and analyzing data from iOS backups."
+authors = [
+    { name = "Cascade AI", email = "dev@cascade.sh" }
+]
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi>=0.110.0",
+    "uvicorn[standard]>=0.24.0",
+    "pydantic-settings>=2.2.1",
+    "sqlalchemy[asyncio]>=2.0.20",
+    "asyncpg>=0.29.0",
+    "alembic>=1.12.0",
+    "python-dotenv>=1.0.0",
+    "redis>=5.0.1",
+    "rq>=1.15.1",
+    "iphone-backup-decrypt>=0.8.4",
+    "cryptography>=41.0.5",
+    "aiofiles>=23.2.1",
+    "orjson>=3.9.10",
+    "httpx>=0.25.0",
+    "python-multipart>=0.0.6",
+    "tenacity>=8.2.3",
+    "passlib[bcrypt]>=1.7.4",
+    "itsdangerous>=2.1.2",
+    "jinja2>=3.1.2",
+    "python-dateutil>=2.8.2",
+    "pypika>=0.48.9"
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.4.0",
+    "pytest-asyncio>=0.21.1",
+    "httpx>=0.25.0",
+    "ruff>=0.1.9",
+    "mypy>=1.7.1"
+]
+
+[project.scripts]
+apple-juicer-api = "api.main:run"
+apple-juicer-worker = "worker.run:main"
+
+[tool.setuptools]
+packages = [
+    "api",
+    "core",
+    "parsers",
+    "worker",
+]
+
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"

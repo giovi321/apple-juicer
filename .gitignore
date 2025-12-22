@@ -1,0 +1,30 @@
+# Python / build
+__pycache__/
+*.py[cod]
+*.so
+.Python
+.pytest_cache/
+.mypy_cache/
+build/
+dist/
+*.egg-info/
+
+# Environments
+.venv/
+.env
+.env.*
+!.env.example
+
+# Editors
+.vscode/
+.idea/
+
+# Node / frontend
+node_modules/
+frontend/dist/
+frontend/build/
+
+# Data / temp
+tmp/
+data/
+*.sqlite
