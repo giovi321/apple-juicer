@@ -8,10 +8,10 @@
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
-  --bg-root: #0f1114;
-  --bg-surface: radial-gradient(circle at 20% 20%, rgba(255, 138, 60, 0.12), transparent 45%), #0f1114;
-  --bg-panel: rgba(18, 20, 26, 0.85);
-  --bg-panel-alt: rgba(21, 23, 29, 0.8);
+  --bg-root: #0a0b0d;
+  --bg-surface: #0a0b0d;
+  --bg-panel: rgba(15, 16, 18, 0.85);
+  --bg-panel-alt: rgba(18, 19, 21, 0.8);
   --border-color: rgba(255, 255, 255, 0.04);
   --text-primary: #f5f6fa;
   --text-muted: rgba(245, 246, 250, 0.65);
@@ -39,5 +39,5 @@ body {
 
 #root {
   min-height: 100vh;
-  background: linear-gradient(180deg, rgba(15, 17, 20, 0.8), rgba(11, 12, 14, 0.95));
+  background: linear-gradient(180deg, rgba(10, 11, 13, 0.95), rgba(8, 9, 11, 0.98));
 }

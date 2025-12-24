@@ -46,16 +46,26 @@ export interface WhatsAppChat {
   metadata?: Record<string, unknown> | null;
 }
 
+export interface WhatsAppAttachment {
+  file_id?: string | null;
+  relative_path?: string | null;
+  mime_type?: string | null;
+  size_bytes?: number | null;
+  metadata?: Record<string, unknown> | null;
+}
+
 export interface WhatsAppMessage {
   id?: string;
   chat_guid: string;
   message_id: string;
   sender: string | null;
+  sender_name: string | null;
   sent_at: string | null;
   message_type: string | null;
   body: string | null;
   is_from_me: boolean;
   has_attachments: boolean;
+  attachments: WhatsAppAttachment[];
   metadata?: Record<string, unknown> | null;
 }
 

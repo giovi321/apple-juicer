@@ -10,9 +10,48 @@ import type {
   WhatsAppMessage,
 } from './types.ts';
 
+// Re-export types for use in components
+export type {
+  BackupStatus,
+  CalendarEvent,
+  ContactRecord,
+  MessageConversation,
+  MessageItem,
+  NoteRecord,
+  PhotoAsset,
+  WhatsAppAttachment,
+  WhatsAppChat,
+  WhatsAppMessage,
+} from './types.ts';
+
 // Use relative API base URL for nginx reverse proxy
 // The nginx server will proxy /api requests to the backend service
 export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api';
+
+function resolveApiBaseUrl(): string {
+  if (API_BASE_URL.startsWith('http://') || API_BASE_URL.startsWith('https://')) {
+    return API_BASE_URL;
+  }
+  if (typeof window !== 'undefined' && window.location?.origin) {
+    return new URL(API_BASE_URL, window.location.origin).toString();
+  }
+  return API_BASE_URL;
+}
+
+function apiUrl(path: string, query?: Record<string, string | number | undefined | null>): string {
+  const base = new URL(resolveApiBaseUrl());
+  if (!base.pathname.endsWith('/')) {
+    base.pathname += '/';
+  }
+  const url = new URL(path.replace(/^\//, ''), base);
+  if (query) {
+    Object.entries(query).forEach(([key, value]) => {
+      if (value === undefined || value === null || value === '') return;
+      url.searchParams.set(key, String(value));
+    });
+  }
+  return url.toString();
+}
 
 export type DecryptionStatus = 'pending' | 'decrypting' | 'decrypted' | 'failed';
 
@@ -28,6 +67,9 @@ export interface BackupSummary {
   decrypted_at?: string | null;
   size_bytes?: number | null;
   last_modified_at?: string | null;
+  indexing_progress?: number | null;
+  indexing_total?: number | null;
+  indexing_artifact?: string | null;
 }
 
 export interface ManifestEntry {
@@ -64,8 +106,12 @@ async function request<T>(path: string, method: HTTPMethod, options: RequestOpti
   // Construct the full URL
   let urlString: string;
   if (API_BASE_URL.startsWith('http://') || API_BASE_URL.startsWith('https://')) {
-    // Absolute URL - use URL constructor
-    const url = new URL(path, API_BASE_URL);
+    // Absolute URL - preserve any base pathname (e.g. http://host/api)
+    const base = new URL(API_BASE_URL);
+    if (!base.pathname.endsWith('/')) {
+      base.pathname += '/';
+    }
+    const url = new URL(path.replace(/^\//, ''), base);
     if (query) {
       Object.entries(query).forEach(([key, value]) => {
         if (value === undefined || value === null || value === '') return;
@@ -194,18 +240,66 @@ export const api = {
     request<{ items: ContactRecord[] }>(`/backups/${backupId}/artifacts/contacts`, 'GET', {
       token,
     }),
-  downloadFile: async (backupId: string, fileId: string, token: string) => {
-    const url = new URL(`/backups/${backupId}/file/${fileId}`, API_BASE_URL);
-    const response = await fetch(url.toString(), {
+  downloadFile: async (backupId: string, fileId: string, token: string, sessionToken?: string) => {
+    const urlString = apiUrl(`/backups/${backupId}/file/${fileId}`);
+    const response = await fetch(urlString, {
       method: 'GET',
       headers: {
         'X-API-Token': token,
+        ...(sessionToken ? { 'X-Backup-Session': sessionToken } : {}),
       },
     });
+    const contentType = response.headers.get('content-type') || '';
+    if (response.ok && contentType.includes('text/html')) {
+      const errorText = await response.text();
+      throw new Error(
+        `Download returned HTML instead of a file (content-type: ${contentType}). URL=${urlString}. BodyStart=${errorText.slice(0, 200)}`,
+      );
+    }
     if (!response.ok) {
       const errorText = await response.text();
       throw new Error(errorText || `Download failed (${response.status})`);
     }
     return response;
+  },
+  downloadWhatsAppAttachment: async (backupId: string, relativePath: string, token: string, sessionToken?: string) => {
+    const urlString = apiUrl(`/backups/${backupId}/artifacts/whatsapp/attachment`, {
+      relative_path: relativePath,
+    });
+    const response = await fetch(urlString, {
+      method: 'GET',
+      headers: {
+        'X-API-Token': token,
+        ...(sessionToken ? { 'X-Backup-Session': sessionToken } : {}),
+      },
+    });
+    const contentType = response.headers.get('content-type') || '';
+    if (response.ok && contentType.includes('text/html')) {
+      const errorText = await response.text();
+      throw new Error(
+        `Attachment download returned HTML instead of media (content-type: ${contentType}). URL=${urlString}. BodyStart=${errorText.slice(0, 200)}`,
+      );
+    }
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(errorText || `Download failed (${response.status})`);
+    }
+    return response;
+  },
+  getWhatsAppAttachmentUrl: (backupId: string, relativePath: string, token: string) => {
+    const urlString = apiUrl(`/backups/${backupId}/artifacts/whatsapp/attachment`, {
+      relative_path: relativePath,
+    });
+    return urlString + `&token=${encodeURIComponent(token)}`;
+  },
+  extractWhatsAppFiles: (backupId: string, chatGuid: string, token: string, sessionToken: string) => {
+    console.log('API: extractWhatsAppFiles called with chatGuid:', chatGuid);
+    const url = `/backups/${backupId}/extract/whatsapp/${encodeURIComponent(chatGuid)}`;
+    console.log('API: Full URL path:', url);
+    return request<{ extracted_files: number; extracted_bytes: number }>(
+      url,
+      'POST',
+      { token, sessionToken }
+    );
   },
 };

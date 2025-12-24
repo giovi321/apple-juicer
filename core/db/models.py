@@ -39,6 +39,9 @@ class Backup(Base):
     decrypted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     last_seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
     last_indexed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    indexing_progress: Mapped[int | None] = mapped_column(BigInteger, nullable=True, default=0)
+    indexing_total: Mapped[int | None] = mapped_column(BigInteger, nullable=True, default=0)
+    indexing_artifact: Mapped[str | None] = mapped_column(String(64), nullable=True)
     size_bytes: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(

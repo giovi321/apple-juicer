@@ -1,12 +1,12 @@
 .explorer {
   min-height: 100vh;
-  background: linear-gradient(180deg, rgba(15, 17, 20, 0.8), rgba(11, 12, 14, 0.95));
+  background: linear-gradient(180deg, rgba(10, 11, 13, 0.95), rgba(8, 9, 11, 0.98));
   display: flex;
   flex-direction: column;
 }
 
 .explorer-header {
-  background: rgba(18, 20, 26, 0.85);
+  background: rgba(15, 16, 18, 0.85);
   border-bottom: 1px solid rgba(255, 139, 60, 0.1);
   padding: 1.5rem 2rem;
   display: flex;
@@ -96,6 +96,7 @@
   width: 100%;
   gap: 2rem;
   padding: 2rem;
+  position: relative;
 }
 
 .module-selector {
@@ -119,7 +120,7 @@
 }
 
 .module-tab {
-  background: rgba(18, 20, 26, 0.85);
+  background: rgba(15, 16, 18, 0.85);
   border: 1px solid rgba(255, 139, 60, 0.1);
   padding: 1rem;
   border-radius: 10px;
@@ -155,7 +156,7 @@
 
 .module-content {
   flex: 1;
-  background: rgba(18, 20, 26, 0.85);
+  background: rgba(15, 16, 18, 0.85);
   border: 1px solid rgba(255, 139, 60, 0.1);
   border-radius: 18px;
   padding: 2rem;
@@ -191,7 +192,7 @@
 .domain-selector select,
 .search-box input {
   padding: 0.75rem;
-  background: rgba(21, 23, 29, 0.8);
+  background: rgba(18, 19, 21, 0.8);
   border: 1px solid rgba(255, 139, 60, 0.2);
   border-radius: 10px;
   font-size: 0.95rem;
@@ -241,7 +242,7 @@
 }
 
 .files-list thead {
-  background: rgba(15, 17, 20, 0.8);
+  background: rgba(10, 11, 13, 0.8);
   border-bottom: 1px solid rgba(255, 139, 60, 0.1);
 }
 
@@ -294,15 +295,82 @@
   font-weight: 600;
 }
 
-.download-btn:hover {
+.download-btn:hover:not(:disabled) {
   background: #ffb347;
   transform: translateY(-1px);
+}
+
+.download-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+
+.download-btn.extracting {
+  background: #4a9eff;
+  color: #fff;
+  animation: pulse 1.5s infinite;
+}
+
+.download-btn.extracted {
+  background: #4cd97b;
+  color: #0f1114;
+  cursor: default;
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.7;
+  }
 }
 
 .whatsapp-module {
   display: flex;
   flex-direction: column;
   height: 100%;
+  position: relative;
+  min-height: 500px;
+}
+
+/* Extraction overlay - blocks all interaction during extraction */
+.extraction-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(10, 11, 13, 0.95);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+  backdrop-filter: blur(8px);
+  cursor: wait;
+  border-radius: 18px;
+}
+
+.extraction-overlay-content {
+  text-align: center;
+  color: #f5f6fa;
+  font-size: 1.1rem;
+}
+
+.extraction-spinner {
+  width: 48px;
+  height: 48px;
+  border: 4px solid rgba(255, 139, 60, 0.2);
+  border-top-color: #ff8b3c;
+  border-radius: 50%;
+  margin: 0 auto 1rem;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .whatsapp-container {
@@ -342,7 +410,7 @@
 
 .search-input {
   padding: 0.5rem;
-  background: rgba(21, 23, 29, 0.8);
+  background: rgba(18, 19, 21, 0.8);
   border: 1px solid rgba(255, 139, 60, 0.2);
   border-radius: 8px;
   font-size: 0.85rem;
@@ -378,7 +446,7 @@
 }
 
 .chats-list.scrollable::-webkit-scrollbar-track {
-  background: rgba(21, 23, 29, 0.5);
+  background: rgba(18, 19, 21, 0.5);
   border-radius: 3px;
 }
 
@@ -392,7 +460,7 @@
 }
 
 .chat-item {
-  background: rgba(18, 20, 26, 0.85);
+  background: rgba(15, 16, 18, 0.85);
   border: 1px solid rgba(255, 139, 60, 0.1);
   padding: 0.75rem;
   border-radius: 8px;
@@ -450,7 +518,7 @@
 }
 
 .messages-list.scrollable::-webkit-scrollbar-track {
-  background: rgba(21, 23, 29, 0.5);
+  background: rgba(18, 19, 21, 0.5);
   border-radius: 3px;
 }
 
@@ -473,7 +541,7 @@
 .message {
   padding: 0.75rem;
   border-radius: 8px;
-  background: rgba(18, 20, 26, 0.85);
+  background: rgba(15, 16, 18, 0.85);
   border: 1px solid rgba(255, 139, 60, 0.1);
 }
 
@@ -506,6 +574,313 @@
 .message-time {
   font-size: 0.75rem;
   color: rgba(245, 246, 250, 0.5);
+}
+
+.progress-bar {
+  position: relative;
+  width: 100%;
+  height: 24px;
+  background: rgba(18, 19, 21, 0.8);
+  border: 1px solid rgba(255, 139, 60, 0.2);
+  border-radius: 12px;
+  overflow: hidden;
+  margin-top: 0.75rem;
+}
+
+.progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #ff8b3c, #ffb347);
+  transition: width 0.3s ease;
+  border-radius: 12px;
+}
+
+.progress-text {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #f5f6fa;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+}
+
+.progress-subtext {
+  margin-top: 0.35rem;
+  font-size: 0.75rem;
+  color: rgba(245, 246, 250, 0.55);
+  white-space: nowrap;
+}
+
+.message-attachments {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+
+.attachment-inline {
+  max-width: 100%;
+}
+
+.attachment-loading,
+.attachment-error {
+  padding: 1rem;
+  text-align: center;
+  color: rgba(245, 246, 250, 0.6);
+  font-size: 0.85rem;
+  background: rgba(18, 19, 21, 0.5);
+  border: 1px solid rgba(255, 139, 60, 0.15);
+  border-radius: 8px;
+}
+
+.attachment-error {
+  color: #ff6b6b;
+  border-color: rgba(255, 107, 107, 0.3);
+}
+
+/* Image attachments */
+.attachment-image-wrapper {
+  position: relative;
+  display: inline-block;
+  max-width: 100%;
+  border-radius: 8px;
+  overflow: hidden;
+  cursor: pointer;
+}
+
+.attachment-image {
+  max-width: 100%;
+  max-height: 300px;
+  display: block;
+  border-radius: 8px;
+  transition: opacity 0.2s;
+}
+
+.attachment-image:hover {
+  opacity: 0.9;
+}
+
+.attachment-download-overlay {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  background: rgba(0, 0, 0, 0.6);
+  border: none;
+  color: white;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1rem;
+  opacity: 0;
+  transition: all 0.2s;
+  backdrop-filter: blur(4px);
+}
+
+.attachment-image-wrapper:hover .attachment-download-overlay {
+  opacity: 1;
+}
+
+.attachment-download-overlay:hover {
+  background: rgba(255, 139, 60, 0.8);
+  transform: scale(1.1);
+}
+
+/* Video attachments */
+.attachment-video-wrapper {
+  position: relative;
+  max-width: 100%;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.attachment-video {
+  max-width: 100%;
+  max-height: 300px;
+  display: block;
+  border-radius: 8px;
+}
+
+.attachment-video-wrapper .attachment-download-overlay {
+  opacity: 0.7;
+}
+
+.attachment-video-wrapper:hover .attachment-download-overlay {
+  opacity: 1;
+}
+
+/* Audio attachments */
+.attachment-audio-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem;
+  background: rgba(18, 19, 21, 0.5);
+  border: 1px solid rgba(255, 139, 60, 0.15);
+  border-radius: 8px;
+}
+
+.audio-mini-btn {
+  background: rgba(255, 139, 60, 0.2);
+  border: 1px solid rgba(255, 139, 60, 0.3);
+  color: #f5f6fa;
+  padding: 0.35rem 0.6rem;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 0.85rem;
+  font-weight: 600;
+  transition: all 0.2s;
+  white-space: nowrap;
+}
+
+.audio-mini-btn:hover {
+  background: rgba(255, 139, 60, 0.35);
+  border-color: rgba(255, 139, 60, 0.5);
+}
+
+.audio-mini-range {
+  flex: 1;
+  min-width: 120px;
+}
+
+.attachment-audio {
+  flex: 1;
+  max-width: 300px;
+}
+
+/* Attachment placeholder (before extraction) */
+.attachment-placeholder {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.75rem;
+  background: rgba(18, 19, 21, 0.5);
+  border: 1px dashed rgba(255, 139, 60, 0.25);
+  border-radius: 8px;
+  font-size: 0.85rem;
+  opacity: 0.7;
+}
+
+.attachment-placeholder .attachment-hint {
+  color: rgba(255, 139, 60, 0.7);
+  font-size: 0.75rem;
+  font-style: italic;
+  margin-left: auto;
+}
+
+/* File attachments */
+.attachment-file {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.75rem;
+  background: rgba(18, 19, 21, 0.5);
+  border: 1px solid rgba(255, 139, 60, 0.15);
+  border-radius: 8px;
+  font-size: 0.85rem;
+}
+
+.attachment-icon {
+  font-size: 1.2rem;
+}
+
+.attachment-name {
+  flex: 1;
+  color: #f5f6fa;
+  font-weight: 500;
+  word-break: break-all;
+}
+
+.attachment-size {
+  color: rgba(245, 246, 250, 0.6);
+  font-size: 0.8rem;
+}
+
+.attachment-download-btn-small {
+  background: rgba(255, 139, 60, 0.2);
+  border: 1px solid rgba(255, 139, 60, 0.3);
+  padding: 0.4rem 0.6rem;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 1rem;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.attachment-download-btn-small:hover {
+  background: rgba(255, 139, 60, 0.4);
+  border-color: rgba(255, 139, 60, 0.5);
+  transform: translateY(-1px);
+}
+
+.image-preview-modal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.9);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  animation: fadeIn 0.2s ease;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.image-preview-content {
+  position: relative;
+  max-width: 90vw;
+  max-height: 90vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.image-preview-content img {
+  max-width: 100%;
+  max-height: 90vh;
+  object-fit: contain;
+  border-radius: 8px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+}
+
+.image-preview-close {
+  position: absolute;
+  top: -40px;
+  right: 0;
+  background: rgba(255, 139, 60, 0.2);
+  border: 1px solid rgba(255, 139, 60, 0.3);
+  color: #f5f6fa;
+  font-size: 1.5rem;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+}
+
+.image-preview-close:hover {
+  background: rgba(255, 139, 60, 0.4);
+  border-color: rgba(255, 139, 60, 0.5);
+  transform: scale(1.1);
 }
 
 .coming-soon {

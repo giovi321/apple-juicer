@@ -5,6 +5,9 @@ import '../styles/BackupSelector.css';
 interface BackupSelectorProps {
   apiToken: string;
   onBackupSelected: (backup: BackupSummary) => void;
+  refreshTrigger?: number;
+  externalMessage?: string | null;
+  decryptingBackupId?: string | null;
 }
 
 interface DeleteConfirmModalProps {
@@ -28,13 +31,22 @@ function DeleteConfirmModal({ onConfirm, onCancel }: DeleteConfirmModalProps) {
   );
 }
 
-export function BackupSelector({ apiToken, onBackupSelected }: BackupSelectorProps) {
+export function BackupSelector({
+  apiToken,
+  onBackupSelected,
+  refreshTrigger,
+  externalMessage,
+  decryptingBackupId,
+}: BackupSelectorProps) {
   const [backups, setBackups] = useState<BackupSummary[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [backupToDelete, setBackupToDelete] = useState<string | null>(null);
   const [actionInProgress, setActionInProgress] = useState<string | null>(null);
+
+  // Determine if any blocking action is in progress (decrypting or deleting)
+  const isBlockingAction = !!decryptingBackupId || !!actionInProgress;
 
   const fetchBackups = useCallback(async () => {
     if (!apiToken) return;
@@ -66,7 +78,7 @@ export function BackupSelector({ apiToken, onBackupSelected }: BackupSelectorPro
 
   useEffect(() => {
     void fetchBackups();
-  }, [fetchBackups]);
+  }, [fetchBackups, refreshTrigger]);
 
   const formatBytes = (bytes: number | null | undefined): string => {
     if (!bytes) return 'Unknown';
@@ -76,10 +88,16 @@ export function BackupSelector({ apiToken, onBackupSelected }: BackupSelectorPro
 
   const formatDate = (date: string | null | undefined): string => {
     if (!date) return 'Never';
-    return new Date(date).toLocaleDateString();
+    const d = new Date(date);
+    const day = String(d.getDate()).padStart(2, '0');
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const year = d.getFullYear();
+    return `${day}/${month}/${year}`;
   };
 
   const handleDeleteDecryptedData = async (backupId: string) => {
+    setShowDeleteModal(false);
+    setBackupToDelete(null);
     setActionInProgress(backupId);
     try {
       await api.deleteDecryptedData(backupId, apiToken);
@@ -88,13 +106,15 @@ export function BackupSelector({ apiToken, onBackupSelected }: BackupSelectorPro
       setError(err instanceof Error ? err.message : 'Failed to delete decrypted data');
     } finally {
       setActionInProgress(null);
-      setShowDeleteModal(false);
-      setBackupToDelete(null);
     }
   };
 
   const handleCardClick = (backup: BackupSummary, e: React.MouseEvent) => {
     if ((e.target as HTMLElement).closest('button')) {
+      return;
+    }
+    // Disable card clicks during decryption or deletion
+    if (isBlockingAction) {
       return;
     }
     onBackupSelected(backup);
@@ -103,12 +123,16 @@ export function BackupSelector({ apiToken, onBackupSelected }: BackupSelectorPro
   return (
     <div className="backup-selector">
       <div className="backup-selector-header">
-        <h1>Apple Juicer</h1>
-        <p>Select a backup to analyze</p>
-        <button onClick={handleRefresh} disabled={loading} className="refresh-btn">
+        <button onClick={handleRefresh} disabled={loading || isBlockingAction} className="refresh-btn">
           {loading ? 'Loading...' : 'Refresh'}
         </button>
       </div>
+
+      {externalMessage && /fail|error/i.test(externalMessage) && (
+        <div className="action-message error">
+          {externalMessage}
+        </div>
+      )}
 
       {error && <div className="error-message">{error}</div>}
 
@@ -121,7 +145,7 @@ export function BackupSelector({ apiToken, onBackupSelected }: BackupSelectorPro
           {backups.map((backup) => (
             <div
               key={backup.id}
-              className="backup-card"
+              className={`backup-card ${isBlockingAction ? 'disabled' : ''}`}
               onClick={(e) => handleCardClick(backup, e)}
             >
               <div className="backup-card-header">
@@ -129,9 +153,34 @@ export function BackupSelector({ apiToken, onBackupSelected }: BackupSelectorPro
                   <h3>{backup.display_name}</h3>
                   <span className="backup-folder-name">{backup.id}</span>
                 </div>
-                <span className={`status-badge status-${backup.decryption_status}`}>
-                  {backup.decryption_status}
-                </span>
+                {(() => {
+                  const isDecrypting =
+                    decryptingBackupId === backup.id || backup.decryption_status === 'decrypting';
+                  const isDeleting = actionInProgress === backup.id;
+                  
+                  let statusKey: string;
+                  let statusLabel: string;
+                  
+                  if (isDeleting) {
+                    statusKey = 'deleting';
+                    statusLabel = 'deleting...';
+                  } else if (isDecrypting) {
+                    statusKey = 'decrypting';
+                    statusLabel = 'decrypting...';
+                  } else if (backup.decryption_status === 'pending') {
+                    statusKey = 'encrypted';
+                    statusLabel = 'encrypted';
+                  } else {
+                    statusKey = backup.decryption_status;
+                    statusLabel = backup.decryption_status;
+                  }
+
+                  return (
+                    <span className={`status-badge status-${statusKey}${isDecrypting || isDeleting ? ' pulsate' : ''}`}>
+                      {statusLabel}
+                    </span>
+                  );
+                })()}
               </div>
               <div className="backup-card-details">
                 {backup.device_name && (

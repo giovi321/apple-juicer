@@ -2,13 +2,13 @@ services:
   postgres:
     image: postgres:16-alpine
     environment:
-      POSTGRES_USER: ${POSTGRES_USER:-ios_backup_user}
+      POSTGRES_USER: ${POSTGRES_USER:-apple_juicer_user}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change_me_in_production}
-      POSTGRES_DB: ${POSTGRES_DB:-ios_backup_explorer}
+      POSTGRES_DB: ${POSTGRES_DB:-apple_juicer}
     volumes:
       - pg_data:/var/lib/postgresql/data
     ports:
-      - "${IOS_BACKUP_POSTGRES_HOST_IP:-127.0.0.1}:${IOS_BACKUP_POSTGRES_HOST_PORT:-5432}:5432"
+      - "${APPLE_JUICER_POSTGRES_HOST_IP:-127.0.0.1}:${APPLE_JUICER_POSTGRES_HOST_PORT:-5432}:5432"
     logging:
       driver: "json-file"
       options:
@@ -19,7 +19,7 @@ services:
     image: redis:7-alpine
     command: redis-server --requirepass ${REDIS_PASSWORD:-change_me_in_production}
     ports:
-      - "${IOS_BACKUP_REDIS_HOST_IP:-127.0.0.1}:${IOS_BACKUP_REDIS_HOST_PORT:-6379}:6379"
+      - "${APPLE_JUICER_REDIS_HOST_IP:-127.0.0.1}:${APPLE_JUICER_REDIS_HOST_PORT:-6379}:6379"
     logging:
       driver: "json-file"
       options:

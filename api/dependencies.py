@@ -4,12 +4,14 @@ from collections.abc import AsyncGenerator
 
 from fastapi import Depends
 
+from core.config import get_settings
 from core.db.session import get_async_session
 from core.services import BackupRegistry, DecryptOrchestrator
 from core.services.unlock_manager import UnlockManager
 
+_settings = get_settings()
 _unlock_manager = UnlockManager()
-_decrypt_orchestrator = DecryptOrchestrator()
+_decrypt_orchestrator = DecryptOrchestrator(_settings.backup_paths.decrypted_path)
 
 
 async def get_db_session() -> AsyncGenerator:

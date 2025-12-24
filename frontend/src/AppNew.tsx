@@ -3,7 +3,7 @@ import { useLocalStorage } from './lib/useLocalStorage';
 import { BackupSelector } from './pages/BackupSelector';
 import { PasswordPrompt } from './pages/PasswordPrompt';
 import { Explorer } from './pages/Explorer';
-import type { BackupSummary } from './lib/api';
+import { api, type BackupSummary } from './lib/api';
 import appLogo from './assets/logo.svg';
 import './AppNew.css';
 
@@ -26,8 +26,6 @@ function RainbowText({ text }: { text: string }) {
 function Breadcrumbs({ currentState, onNavigate }: { currentState: AppState; onNavigate: (state: AppState) => void }) {
   const steps = [
     { state: 'backup-selector', label: 'Select Backup' },
-    { state: 'password-prompt', label: 'Decrypt Backup' },
-    { state: 'explorer', label: 'Explore' },
   ];
 
   return (
@@ -47,9 +45,13 @@ function Breadcrumbs({ currentState, onNavigate }: { currentState: AppState; onN
 
 function AppNew() {
   const [apiToken, setApiToken] = useLocalStorage<string>('ibe.apiToken', '');
+  const [backupSessions, setBackupSessions] = useLocalStorage<Record<string, string>>('ibe.backupSessions', {});
   const [appState, setAppState] = useState<AppState>('token-input');
   const [selectedBackup, setSelectedBackup] = useState<BackupSummary | null>(null);
   const [tokenInput, setTokenInput] = useState(apiToken);
+  const [refreshTick, setRefreshTick] = useState(0);
+  const [decryptMessage, setDecryptMessage] = useState<string | null>(null);
+  const [decryptingBackupId, setDecryptingBackupId] = useState<string | null>(null);
 
   useEffect(() => {
     if (apiToken) {
@@ -66,6 +68,7 @@ function AppNew() {
   };
 
   const handleBackupSelected = (backup: BackupSummary) => {
+    setDecryptMessage(null);
     setSelectedBackup(backup);
     if (backup.decryption_status === 'decrypted') {
       setAppState('explorer');
@@ -74,13 +77,11 @@ function AppNew() {
     }
   };
 
-  const handleDecryptComplete = () => {
-    setAppState('explorer');
-  };
-
   const handleBack = () => {
     setAppState('backup-selector');
     setSelectedBackup(null);
+    setDecryptMessage(null);
+    setDecryptingBackupId(null);
   };
 
   const handleLogout = () => {
@@ -88,6 +89,15 @@ function AppNew() {
     setTokenInput('');
     setAppState('token-input');
     setSelectedBackup(null);
+    setBackupSessions({});
+  };
+
+  const handleSessionToken = (token: string) => {
+    if (!selectedBackup) return;
+    setBackupSessions({
+      ...backupSessions,
+      [selectedBackup.id]: token,
+    });
   };
 
   const handleNavigate = (state: AppState) => {
@@ -98,6 +108,37 @@ function AppNew() {
       setAppState('password-prompt');
     } else if (state === 'explorer' && selectedBackup) {
       setAppState('explorer');
+    }
+  };
+
+  const handlePasswordSubmit = async (password: string) => {
+    if (!selectedBackup || !apiToken) return;
+    setAppState('backup-selector');
+    setDecryptMessage('Decrypting backup…');
+    setDecryptingBackupId(selectedBackup.id);
+    try {
+      const response = await api.decryptBackup(selectedBackup.id, password, apiToken);
+      if (response.decryption_status === 'decrypted') {
+        try {
+          const unlock = await api.unlockBackup(selectedBackup.id, password, apiToken);
+          handleSessionToken(unlock.session_token);
+        } catch {
+          // ignore unlock errors
+        }
+        setDecryptMessage(null);
+        setDecryptingBackupId(null);
+        setAppState('explorer');
+      } else if (response.decryption_status === 'failed') {
+        setDecryptMessage(response.error || 'Decryption failed. Please try again.');
+        setDecryptingBackupId(null);
+      } else {
+        setDecryptMessage('Decrypting backup…');
+      }
+    } catch (err) {
+      setDecryptMessage(err instanceof Error ? err.message : 'Decryption failed');
+      setDecryptingBackupId(null);
+    } finally {
+      setRefreshTick((tick) => tick + 1);
     }
   };
 
@@ -141,22 +182,32 @@ function AppNew() {
 
       {appState === 'backup-selector' && (
         <div className="app-page">
-          <BackupSelector apiToken={apiToken} onBackupSelected={handleBackupSelected} />
+          <BackupSelector
+            apiToken={apiToken}
+            onBackupSelected={handleBackupSelected}
+            refreshTrigger={refreshTick}
+            externalMessage={decryptMessage}
+            decryptingBackupId={decryptingBackupId}
+          />
         </div>
       )}
 
       {appState === 'password-prompt' && selectedBackup && (
         <PasswordPrompt
-          apiToken={apiToken}
           backup={selectedBackup}
-          onDecryptComplete={handleDecryptComplete}
+          onSubmitPassword={handlePasswordSubmit}
           onCancel={handleBack}
         />
       )}
 
       {appState === 'explorer' && selectedBackup && (
         <div className="app-page">
-          <Explorer apiToken={apiToken} backup={selectedBackup} />
+          <Explorer
+            apiToken={apiToken}
+            backup={selectedBackup}
+            sessionToken={backupSessions[selectedBackup.id]}
+            onSessionToken={handleSessionToken}
+          />
         </div>
       )}
     </div>

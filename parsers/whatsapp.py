@@ -22,6 +22,7 @@ class WhatsAppMessageRecord:
     chat_guid: str
     message_id: str
     sender: str | None
+    sender_name: str | None
     sent_at: datetime | None
     message_type: str | None
     body: str | None
@@ -36,6 +37,11 @@ class WhatsAppAttachmentRecord:
     mime_type: str | None
     size_bytes: int | None
     metadata: dict[str, Any]
+
+
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 def parse_whatsapp(db_path: Path) -> Tuple[
@@ -55,6 +61,35 @@ def parse_whatsapp(db_path: Path) -> Tuple[
             return [], [], []
         if not table_exists(conn, "ZWAMESSAGE"):
             return [], [], []
+        
+        # Log available tables for debugging
+        tables = conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()
+        logger.info(f"WhatsApp DB tables: {[t[0] for t in tables]}")
+        
+        # Log ZWAMESSAGE columns for debugging
+        msg_cols = conn.execute("PRAGMA table_info(ZWAMESSAGE)").fetchall()
+        logger.info(f"ZWAMESSAGE columns: {[c[1] for c in msg_cols]}")
+        
+        # Check for profile/contact tables and build JID -> name lookup
+        jid_to_name: dict[str, str] = {}
+        
+        if table_exists(conn, "ZWAPROFILEPUSHNAME"):
+            logger.info("Found ZWAPROFILEPUSHNAME table")
+            profile_cols = conn.execute("PRAGMA table_info(ZWAPROFILEPUSHNAME)").fetchall()
+            logger.info(f"ZWAPROFILEPUSHNAME columns: {[c[1] for c in profile_cols]}")
+            profile_rows = conn.execute("SELECT * FROM ZWAPROFILEPUSHNAME").fetchall()
+            for row in profile_rows:
+                pdata = dict(row)
+                jid = pdata.get("ZJID") or pdata.get("ZCONTACTJID")
+                name = pdata.get("ZPUSHNAME") or pdata.get("ZNAME")
+                if jid and name:
+                    jid_to_name[jid] = name
+            logger.info(f"Loaded {len(jid_to_name)} profile push names")
+        
+        if table_exists(conn, "ZWAGROUPMEMBER"):
+            logger.info("Found ZWAGROUPMEMBER table")
+            member_cols = conn.execute("PRAGMA table_info(ZWAGROUPMEMBER)").fetchall()
+            logger.info(f"ZWAGROUPMEMBER columns: {[c[1] for c in member_cols]}")
 
         chat_rows = conn.execute("SELECT * FROM ZWACHATSESSION").fetchall()
         chat_pk_to_guid: dict[int, str] = {}
@@ -83,8 +118,47 @@ def parse_whatsapp(db_path: Path) -> Tuple[
                 )
             )
 
+        # Build lookups for group members: PK -> JID and (chat_pk, member_jid) -> name
+        group_member_pk_to_jid: dict[int, str] = {}  # Z_PK -> ZMEMBERJID
+        group_member_names: dict[tuple[int, str], str] = {}  # (chat_pk, member_jid) -> name
+        if table_exists(conn, "ZWAGROUPMEMBER"):
+            member_rows = conn.execute("SELECT * FROM ZWAGROUPMEMBER").fetchall()
+            for row in member_rows:
+                mdata = dict(row)
+                member_pk = mdata.get("Z_PK")
+                chat_fk = mdata.get("ZCHATSESSION")
+                member_jid = mdata.get("ZMEMBERJID")
+                member_name = mdata.get("ZCONTACTNAME") or mdata.get("ZPUSHNAME")
+                if member_pk and member_jid:
+                    group_member_pk_to_jid[member_pk] = member_jid
+                if chat_fk and member_jid and member_name:
+                    group_member_names[(chat_fk, member_jid)] = member_name
+
+        # Build a lookup for chat partner names (for 1:1 chats)
+        chat_pk_to_partner_name: dict[int, str] = {}
+        chat_pk_to_partner_jid: dict[int, str] = {}
+        for row in chat_rows:
+            data = dict(row)
+            pk = data.get("Z_PK")
+            partner_name = data.get("ZPARTNERNAME") or data.get("ZPARTNERDISPLAYNAME")
+            partner_jid = data.get("ZCONTACTJID")
+            if pk and partner_name:
+                chat_pk_to_partner_name[pk] = partner_name
+            if pk and partner_jid:
+                chat_pk_to_partner_jid[pk] = partner_jid
+
         message_rows = conn.execute("SELECT * FROM ZWAMESSAGE").fetchall()
         message_pk_to_record: dict[int, WhatsAppMessageRecord] = {}
+        
+        # Log sample message data for debugging (first 3 non-from-me messages)
+        sample_count = 0
+        for row in message_rows:
+            if sample_count >= 3:
+                break
+            data = dict(row)
+            if not data.get("ZISFROMME"):
+                logger.info(f"Sample message data: ZFROMJID={data.get('ZFROMJID')}, ZSENDERJID={data.get('ZSENDERJID')}, ZPUSHNAME={data.get('ZPUSHNAME')}, ZTEXT={str(data.get('ZTEXT'))[:50] if data.get('ZTEXT') else None}")
+                sample_count += 1
 
         for row in message_rows:
             data = dict(row)
@@ -93,10 +167,46 @@ def parse_whatsapp(db_path: Path) -> Tuple[
             message_id = str(data.get("ZMESSAGEID") or data.get("ZSTANZAID") or data.get("Z_PK"))
             sent_raw = data.get("ZMESSAGEDATE") or data.get("ZMESSAGETIME")
             sent_at = apple_timestamp(sent_raw)
+            
+            # Get sender JID - for group chats, use ZGROUPMEMBER FK to get actual sender
+            # ZFROMJID often contains the group JID, not the individual sender
+            group_member_fk = data.get("ZGROUPMEMBER")
+            if group_member_fk and group_member_fk in group_member_pk_to_jid:
+                # Group chat: get sender JID from group member table
+                sender_jid = group_member_pk_to_jid[group_member_fk]
+            else:
+                # 1:1 chat or fallback: use ZFROMJID
+                raw_jid = data.get("ZFROMJID") or data.get("ZSENDERJID")
+                # For 1:1 chats, ZFROMJID might be the chat JID, use partner JID instead
+                if raw_jid and "@g.us" in str(raw_jid):
+                    # This is a group JID, try to get partner JID for 1:1 chats
+                    sender_jid = chat_pk_to_partner_jid.get(chat_pk) if chat_pk else raw_jid
+                else:
+                    sender_jid = raw_jid
+            
+            # Get sender name - try multiple sources:
+            # 1. Profile push name lookup (from ZWAPROFILEPUSHNAME table) - most reliable
+            # 2. Group member lookup (for group chats)
+            # 3. Chat partner name (for 1:1 chats where sender is the partner)
+            # Note: ZPUSHNAME in ZWAMESSAGE is often a blob, not usable
+            sender_name = None
+            if sender_jid:
+                # Try profile push name lookup first
+                sender_name = jid_to_name.get(sender_jid)
+            if not sender_name and chat_pk and sender_jid:
+                # Try group member lookup
+                sender_name = group_member_names.get((chat_pk, sender_jid))
+            if not sender_name and chat_pk:
+                # For 1:1 chats, if sender is not me, use the chat partner name
+                is_from_me = bool(data.get("ZISFROMME"))
+                if not is_from_me:
+                    sender_name = chat_pk_to_partner_name.get(chat_pk)
+            
             message = WhatsAppMessageRecord(
                 chat_guid=chat_guid,
                 message_id=message_id,
-                sender=data.get("ZFROMJID") or data.get("ZSENDERJID"),
+                sender=sender_jid,
+                sender_name=sender_name,
                 sent_at=sent_at,
                 message_type=str(data.get("ZGROUPEVENTTYPE") or data.get("ZMESSAGETYPE")),
                 body=data.get("ZTEXT"),

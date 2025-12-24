@@ -134,6 +134,33 @@ class BackupFS:
 
         return self._with_manifest_cursor(_query)
 
+    def get_entries_by_file_ids(self, file_ids: List[str]) -> dict[str, ManifestFileEntry]:
+        """Batch lookup of manifest entries by file IDs. Returns a dict mapping file_id to entry."""
+        if not file_ids:
+            return {}
+        
+        def _query(cursor: sqlite3.Cursor) -> dict[str, ManifestFileEntry]:
+            # SQLite has a limit on the number of variables, so we batch in chunks of 500
+            result = {}
+            chunk_size = 500
+            for i in range(0, len(file_ids), chunk_size):
+                chunk = file_ids[i:i + chunk_size]
+                placeholders = ",".join("?" * len(chunk))
+                cursor.execute(
+                    f"""
+                    SELECT fileID, domain, relativePath, flags, file
+                    FROM Files
+                    WHERE fileID IN ({placeholders})
+                    """,
+                    chunk,
+                )
+                for row in cursor.fetchall():
+                    entry = self._row_to_entry(row)
+                    result[entry.file_id] = entry
+            return result
+
+        return self._with_manifest_cursor(_query)
+
     @contextmanager
     def stream_file_by_id(self, file_id: str):
         entry = self.get_entry_by_file_id(file_id)

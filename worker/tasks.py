@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from datetime import datetime, timezone
 import json
 import logging
 from pathlib import Path
@@ -53,23 +54,54 @@ async def _index_backup_job(
             raise RuntimeError(f"Unknown backup {backup_identifier}")
 
         backup.status = BackupStatus.INDEXING
+        backup.indexing_progress = 0
+        backup.indexing_total = 1
+        backup.indexing_artifact = None
         await session.flush()
+        await session.commit()
 
         await _truncate_artifacts(session, backup)
+        await session.commit()
 
         await _ingest_photos(session, backup, Path(artifact_files["photos"]) if "photos" in artifact_files else None)
+        await session.commit()
         await _ingest_whatsapp(session, backup, Path(artifact_files["whatsapp"]) if "whatsapp" in artifact_files else None)
+        await session.commit()
         await _ingest_messages(session, backup, Path(artifact_files["messages"]) if "messages" in artifact_files else None)
+        await session.commit()
         await _ingest_notes(session, backup, Path(artifact_files["notes"]) if "notes" in artifact_files else None)
+        await session.commit()
         await _ingest_calendar(session, backup, Path(artifact_files["calendar"]) if "calendar" in artifact_files else None)
+        await session.commit()
         await _ingest_contacts(session, backup, Path(artifact_files["contacts"]) if "contacts" in artifact_files else None)
+        await session.commit()
 
         backup.status = BackupStatus.INDEXED
-        backup.last_indexed_at = settings.environment and backup.updated_at
+        backup.last_indexed_at = datetime.now(timezone.utc)
+        backup.indexing_progress = backup.indexing_total
+        backup.indexing_artifact = None
         await session.commit()
 
 
 async def _truncate_artifacts(session: AsyncSession, backup: Backup) -> None:
+    # Delete WhatsAppAttachments BEFORE deleting messages (no backup_id on attachments)
+    await session.execute(
+        delete(WhatsAppAttachment).where(
+            WhatsAppAttachment.message_id.in_(
+                select(WhatsAppMessage.id).where(WhatsAppMessage.backup_id == backup.id)
+            )
+        )
+    )
+    
+    # Delete MessageAttachments BEFORE deleting messages (no backup_id on attachments)
+    await session.execute(
+        delete(MessageAttachment).where(
+            MessageAttachment.message_id.in_(
+                select(Message.id).where(Message.backup_id == backup.id)
+            )
+        )
+    )
+    
     tables_with_backup_id = [
         PhotoAsset,
         WhatsAppMessage,
@@ -84,133 +116,173 @@ async def _truncate_artifacts(session: AsyncSession, backup: Backup) -> None:
     ]
     for table in tables_with_backup_id:
         await session.execute(delete(table).where(table.backup_id == backup.id))
-    
-    # Delete WhatsAppAttachments through their messages
-    await session.execute(
-        delete(WhatsAppAttachment).where(
-            WhatsAppAttachment.message_id.in_(
-                select(WhatsAppMessage.id).where(WhatsAppMessage.backup_id == backup.id)
-            )
-        )
-    )
-    
-    # Delete MessageAttachments through their messages
-    await session.execute(
-        delete(MessageAttachment).where(
-            MessageAttachment.message_id.in_(
-                select(Message.id).where(Message.backup_id == backup.id)
-            )
-        )
-    )
 
 
 async def _ingest_photos(session: AsyncSession, backup: Backup, db_path: Path | None) -> None:
     if not db_path or not str(db_path).strip() or not db_path.exists():
         return
+    backup.indexing_artifact = "photos"
+    await session.flush()
+    await session.commit()
+
     assets = photos_parser.parse_photos(db_path)
-    photo_rows = [
-        PhotoAsset(
-            backup_id=backup.id,
-            asset_id=asset.asset_id,
-            original_filename=asset.original_filename,
-            relative_path=asset.relative_path,
-            file_id=asset.file_id,
-            taken_at=asset.taken_at,
-            timezone_offset_minutes=asset.timezone_offset_minutes,
-            width=asset.width,
-            height=asset.height,
-            media_type=asset.media_type,
-            metadata=asset.metadata,
-        )
-        for asset in assets
-    ]
-    session.add_all(photo_rows)
-    await _add_search_rows(
-        session,
-        backup,
-        "photo",
-        [
-            ArtifactSearchIndex(
+    backup.indexing_total = (backup.indexing_total or 0) + len(assets)
+    await session.flush()
+    await session.commit()
+
+    chunk_size = 500
+    for offset in range(0, len(assets), chunk_size):
+        chunk = assets[offset : offset + chunk_size]
+        photo_rows = [
+            PhotoAsset(
                 backup_id=backup.id,
-                artifact_type="photo",
-                artifact_ref=asset.asset_id or asset.file_id or "",
-                display_text=asset.original_filename,
-                payload=asset.metadata,
-                search_text=" ".join(filter(None, [asset.original_filename, asset.relative_path])),
+                asset_id=asset.asset_id,
+                original_filename=asset.original_filename,
+                relative_path=asset.relative_path,
+                file_id=asset.file_id,
+                taken_at=asset.taken_at,
+                timezone_offset_minutes=asset.timezone_offset_minutes,
+                width=asset.width,
+                height=asset.height,
+                media_type=asset.media_type,
+                metadata=asset.metadata,
             )
-            for asset in assets
-        ],
-    )
+            for asset in chunk
+        ]
+        session.add_all(photo_rows)
+        await _add_search_rows(
+            session,
+            backup,
+            "photo",
+            [
+                ArtifactSearchIndex(
+                    backup_id=backup.id,
+                    artifact_type="photo",
+                    artifact_ref=asset.asset_id or asset.file_id or "",
+                    display_text=asset.original_filename,
+                    payload=asset.metadata,
+                    search_text=" ".join(filter(None, [asset.original_filename, asset.relative_path])),
+                )
+                for asset in chunk
+            ],
+        )
+        backup.indexing_progress = (backup.indexing_progress or 0) + len(chunk)
+        await session.flush()
+        await session.commit()
 
 
 async def _ingest_whatsapp(session: AsyncSession, backup: Backup, db_path: Path | None) -> None:
     if not db_path or not str(db_path).strip() or not db_path.exists():
         return
-    chats, messages, attachments = whatsapp_parser.parse_whatsapp(db_path)
-
-    chat_rows = [
-        WhatsAppChat(
-            backup_id=backup.id,
-            chat_guid=chat.chat_guid,
-            title=chat.title,
-            participant_count=chat.participant_count,
-            last_message_at=chat.last_message_at,
-            metadata=chat.metadata,
-        )
-        for chat in chats
-    ]
-    session.add_all(chat_rows)
+    backup.indexing_artifact = "whatsapp"
     await session.flush()
+    await session.commit()
 
-    chat_guid_to_id = {row.chat_guid: row.id for row in chat_rows}
+    # Delete existing WhatsApp data for this backup to allow re-indexing
+    await session.execute(delete(WhatsAppChat).where(WhatsAppChat.backup_id == backup.id))
+    await session.commit()
+
+    chats, messages, attachments = whatsapp_parser.parse_whatsapp(db_path)
+    backup.indexing_total = (backup.indexing_total or 0) + len(chats) + len(messages) + len(attachments)
+    await session.flush()
+    await session.commit()
+
+    chunk_size = 1000
+
+    chat_guid_to_id: dict[str, object] = {}
+    for offset in range(0, len(chats), chunk_size):
+        chunk = chats[offset : offset + chunk_size]
+        chat_rows = [
+            WhatsAppChat(
+                backup_id=backup.id,
+                chat_guid=chat.chat_guid,
+                title=chat.title,
+                participant_count=chat.participant_count,
+                last_message_at=chat.last_message_at,
+                metadata=chat.metadata,
+            )
+            for chat in chunk
+        ]
+        session.add_all(chat_rows)
+        await session.flush()
+        for row in chat_rows:
+            chat_guid_to_id[row.chat_guid] = row.id
+        backup.indexing_progress = (backup.indexing_progress or 0) + len(chunk)
+        await session.flush()
+        await session.commit()
 
     messages_with_attachments = {(msg.chat_guid, msg.message_id) for msg, _ in attachments}
-    message_pairs = []
-    message_rows = []
-    for message in messages:
-        chat_id = chat_guid_to_id.get(message.chat_guid)
-        if not chat_id:
-            continue
-        row = WhatsAppMessage(
-            backup_id=backup.id,
-            chat_id=chat_id,
-            message_id=message.message_id,
-            sender=message.sender,
-            sent_at=message.sent_at,
-            media_type=message.message_type,
-            body=message.body,
-            is_from_me=message.is_from_me,
-            has_attachments=(message.chat_guid, message.message_id) in messages_with_attachments,
-            metadata=message.metadata,
-        )
-        message_rows.append(row)
-        message_pairs.append((message, row))
-    session.add_all(message_rows)
-    await session.flush()
+    message_key: dict[tuple[str, str], object] = {}
 
-    message_key = {(msg.chat_guid, msg.message_id): msg_row.id for msg, msg_row in message_pairs}
-
-    attachment_rows = []
-    for msg, attachment in attachments:
-        message_id = message_key.get((msg.chat_guid, msg.message_id))
-        if not message_id:
-            continue
-        attachment_rows.append(
-            WhatsAppAttachment(
-                message_id=message_id,
-                file_id=attachment.file_id,
-                relative_path=attachment.relative_path,
-                mime_type=attachment.mime_type,
-                size_bytes=attachment.size_bytes,
-                metadata=attachment.metadata,
+    for offset in range(0, len(messages), chunk_size):
+        chunk = messages[offset : offset + chunk_size]
+        message_rows: list[WhatsAppMessage] = []
+        message_pairs: list[tuple[object, WhatsAppMessage]] = []
+        for message in chunk:
+            chat_id = chat_guid_to_id.get(message.chat_guid)
+            if not chat_id:
+                continue
+            row = WhatsAppMessage(
+                backup_id=backup.id,
+                chat_id=chat_id,
+                message_id=message.message_id,
+                sender=message.sender,
+                sender_name=message.sender_name,
+                sent_at=message.sent_at,
+                media_type=message.message_type,
+                body=message.body,
+                is_from_me=message.is_from_me,
+                has_attachments=(message.chat_guid, message.message_id) in messages_with_attachments,
+                metadata=message.metadata,
             )
-        )
-    session.add_all(attachment_rows)
+            message_rows.append(row)
+            message_pairs.append((message, row))
+
+        if not message_rows:
+            continue
+
+        session.add_all(message_rows)
+        await session.flush()
+        for msg, msg_row in message_pairs:
+            message_key[(msg.chat_guid, msg.message_id)] = msg_row.id
+
+        backup.indexing_progress = (backup.indexing_progress or 0) + len(message_rows)
+        await session.flush()
+        await session.commit()
+
+    for offset in range(0, len(attachments), chunk_size):
+        chunk = attachments[offset : offset + chunk_size]
+        attachment_rows: list[WhatsAppAttachment] = []
+        for msg, attachment in chunk:
+            message_id = message_key.get((msg.chat_guid, msg.message_id))
+            if not message_id:
+                continue
+            attachment_rows.append(
+                WhatsAppAttachment(
+                    message_id=message_id,
+                    file_id=attachment.file_id,
+                    relative_path=attachment.relative_path,
+                    mime_type=attachment.mime_type,
+                    size_bytes=attachment.size_bytes,
+                    metadata=attachment.metadata,
+                )
+            )
+
+        if not attachment_rows:
+            continue
+
+        session.add_all(attachment_rows)
+        await session.flush()
+        backup.indexing_progress = (backup.indexing_progress or 0) + len(attachment_rows)
+        await session.flush()
+        await session.commit()
 
 
 async def _ingest_messages(session: AsyncSession, backup: Backup, db_path: Path | None) -> None:
     if not db_path or not str(db_path).strip() or not db_path.exists():
         return
+    backup.indexing_artifact = "messages"
+    await session.flush()
     conversations, messages, attachments = messages_parser.parse_messages(db_path)
 
     conversation_rows = [
@@ -265,11 +337,15 @@ async def _ingest_messages(session: AsyncSession, backup: Backup, db_path: Path 
             )
         )
     session.add_all(attachment_rows)
+    backup.indexing_progress = (backup.indexing_progress or 0) + 1
+    await session.flush()
 
 
 async def _ingest_notes(session: AsyncSession, backup: Backup, db_path: Path | None) -> None:
     if not db_path or not str(db_path).strip() or not db_path.exists():
         return
+    backup.indexing_artifact = "notes"
+    await session.flush()
     notes = notes_parser.parse_notes(db_path)
     note_rows = [
         Note(
@@ -285,11 +361,15 @@ async def _ingest_notes(session: AsyncSession, backup: Backup, db_path: Path | N
         for note in notes
     ]
     session.add_all(note_rows)
+    backup.indexing_progress = (backup.indexing_progress or 0) + 1
+    await session.flush()
 
 
 async def _ingest_calendar(session: AsyncSession, backup: Backup, db_path: Path | None) -> None:
     if not db_path or not str(db_path).strip() or not db_path.exists():
         return
+    backup.indexing_artifact = "calendar"
+    await session.flush()
     calendars, events = calendar_parser.parse_calendar(db_path)
     calendar_rows = [
         Calendar(
@@ -324,11 +404,15 @@ async def _ingest_calendar(session: AsyncSession, backup: Backup, db_path: Path 
             )
         )
     session.add_all(event_rows)
+    backup.indexing_progress = (backup.indexing_progress or 0) + 1
+    await session.flush()
 
 
 async def _ingest_contacts(session: AsyncSession, backup: Backup, db_path: Path | None) -> None:
     if not db_path or not str(db_path).strip() or not db_path.exists():
         return
+    backup.indexing_artifact = "contacts"
+    await session.flush()
     contacts = contacts_parser.parse_contacts(db_path)
     contact_rows = [
         Contact(
@@ -346,6 +430,8 @@ async def _ingest_contacts(session: AsyncSession, backup: Backup, db_path: Path 
         for contact in contacts
     ]
     session.add_all(contact_rows)
+    backup.indexing_progress = (backup.indexing_progress or 0) + 1
+    await session.flush()
 
 
 async def _add_search_rows(session: AsyncSession, backup: Backup, artifact: str, rows: Iterable[ArtifactSearchIndex]):

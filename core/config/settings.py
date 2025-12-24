@@ -35,7 +35,7 @@ class SecuritySettings(BaseModel):
 
 
 class PostgresSettings(BaseModel):
-    dsn: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/apple_juicer"
+    dsn: str = "sqlite+aiosqlite:///./temp_data/apple_juicer.db"
 
 
 class RedisSettings(BaseModel):
@@ -55,6 +55,7 @@ class AppSettings(BaseSettings):
         env_file_encoding="utf-8",
         env_prefix="APPLE_JUICER_",
         env_nested_delimiter="__",
+        extra="ignore",
     )
 
     environment: str = "development"

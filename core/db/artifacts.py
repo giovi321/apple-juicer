@@ -3,15 +3,15 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Index, String, Text
-from sqlalchemy.dialects.postgresql import JSONB, UUID
+from sqlalchemy import Boolean, DateTime, ForeignKey, Index, String, Text, JSON
+from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from core.db.base import Base
 
 
 class MetadataJSONMixin:
-    metadata_blob: Mapped[dict | None] = mapped_column("metadata", JSONB)
+    metadata_blob: Mapped[dict | None] = mapped_column("metadata", JSON)
 
     @property
     def metadata(self) -> dict | None:
@@ -50,10 +50,16 @@ class WhatsAppChat(Base, MetadataJSONMixin):
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     backup_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("backups.id", ondelete="CASCADE"), index=True)
-    chat_guid: Mapped[str] = mapped_column(String(255), unique=True)
+    chat_guid: Mapped[str] = mapped_column(String(255))
     title: Mapped[str | None] = mapped_column(String(255))
     participant_count: Mapped[int | None]
     last_message_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    messages: Mapped[list["WhatsAppMessage"]] = relationship(back_populates="chat", cascade="all, delete-orphan")
+
+    __table_args__ = (
+        Index("ix_whatsapp_chats_backup_guid", "backup_id", "chat_guid", unique=True),
+    )
 
 
 class WhatsAppMessage(Base, MetadataJSONMixin):
@@ -64,6 +70,7 @@ class WhatsAppMessage(Base, MetadataJSONMixin):
     chat_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("whatsapp_chats.id", ondelete="CASCADE"), index=True)
     message_id: Mapped[str] = mapped_column(String(255), index=True)
     sender: Mapped[str | None] = mapped_column(String(255))
+    sender_name: Mapped[str | None] = mapped_column(String(255))
     sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), index=True)
     media_type: Mapped[str | None] = mapped_column(String(64))
     is_from_me: Mapped[bool] = mapped_column(Boolean, default=False)
@@ -104,7 +111,7 @@ class MessageConversation(Base):
     service: Mapped[str | None] = mapped_column(String(32))
     display_name: Mapped[str | None] = mapped_column(String(255))
     last_message_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-    participant_handles: Mapped[list | None] = mapped_column(JSONB)
+    participant_handles: Mapped[list | None] = mapped_column(JSON)
 
 
 class Message(Base, MetadataJSONMixin):
@@ -121,7 +128,7 @@ class Message(Base, MetadataJSONMixin):
     sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), index=True)
     text: Mapped[str | None] = mapped_column(Text)
     has_attachments: Mapped[bool] = mapped_column(Boolean, default=False)
-    metadata_blob: Mapped[dict | None] = mapped_column("metadata", JSONB)
+    metadata_blob: Mapped[dict | None] = mapped_column("metadata", JSON)
 
 
 class MessageAttachment(Base, MetadataJSONMixin):
@@ -133,7 +140,7 @@ class MessageAttachment(Base, MetadataJSONMixin):
     relative_path: Mapped[str | None] = mapped_column(String(1024))
     mime_type: Mapped[str | None] = mapped_column(String(255))
     size_bytes: Mapped[int | None]
-    metadata_blob: Mapped[dict | None] = mapped_column("metadata", JSONB)
+    metadata_blob: Mapped[dict | None] = mapped_column("metadata", JSON)
 
 
 class Note(Base, MetadataJSONMixin):
@@ -190,8 +197,8 @@ class Contact(Base):
     first_name: Mapped[str | None] = mapped_column(String(255))
     last_name: Mapped[str | None] = mapped_column(String(255))
     company: Mapped[str | None] = mapped_column(String(255))
-    emails: Mapped[list | None] = mapped_column(JSONB)
-    phones: Mapped[list | None] = mapped_column(JSONB)
+    emails: Mapped[list | None] = mapped_column(JSON)
+    phones: Mapped[list | None] = mapped_column(JSON)
     created_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     avatar_file_id: Mapped[str | None] = mapped_column(String(128))
@@ -205,6 +212,6 @@ class ArtifactSearchIndex(Base):
     artifact_type: Mapped[str] = mapped_column(String(64), index=True)
     artifact_ref: Mapped[str] = mapped_column(String(255), index=True)
     display_text: Mapped[str | None] = mapped_column(String(512))
-    payload: Mapped[dict | None] = mapped_column(JSONB)
+    payload: Mapped[dict | None] = mapped_column(JSON)
     search_text: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)

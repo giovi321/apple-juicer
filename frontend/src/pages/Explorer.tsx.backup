@@ -1,0 +1,1043 @@
+import { useCallback, useEffect, useState } from 'react';
+import { api, type BackupSummary, type ManifestEntry } from '../lib/api';
+import '../styles/Explorer.css';
+
+interface ExplorerProps {
+  apiToken: string;
+  backup: BackupSummary;
+}
+
+type ModuleView = 'files' | 'whatsapp' | 'messages' | 'photos' | 'notes' | 'calendar' | 'contacts';
+
+const MODULES: { id: ModuleView; label: string; description: string }[] = [
+  { id: 'files', label: 'Manifest', description: 'Browse manifest entries' },
+  { id: 'whatsapp', label: 'WhatsApp', description: 'Explore chats and messages' },
+  { id: 'messages', label: 'Messages', description: 'iMessage/SMS conversations' },
+  { id: 'photos', label: 'Photos', description: 'Photos timeline' },
+  { id: 'notes', label: 'Notes', description: 'Notes database' },
+  { id: 'calendar', label: 'Calendar', description: 'Calendar events' },
+  { id: 'contacts', label: 'Contacts', description: 'Address book entries' },
+];
+
+export function Explorer({ apiToken, backup }: ExplorerProps) {
+  const [activeModule, setActiveModule] = useState<ModuleView>('files');
+  const [domains, setDomains] = useState<string[]>([]);
+  const [selectedDomain, setSelectedDomain] = useState<string | null>(null);
+  const [files, setFiles] = useState<ManifestEntry[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [chatSearchTerm, setChatSearchTerm] = useState('');
+  const [messageSearchTerm, setMessageSearchTerm] = useState('');
+  const [whatsappChats, setWhatsappChats] = useState<any[]>([]);
+  const [selectedChatGuid, setSelectedChatGuid] = useState<string | null>(null);
+  const [whatsappMessages, setWhatsappMessages] = useState<any[]>([]);
+  const [displayedMessages, setDisplayedMessages] = useState<any[]>([]);
+  const [messageOffset, setMessageOffset] = useState(0);
+  const MESSAGE_BATCH_SIZE = 100;
+  const [previewImage, setPreviewImage] = useState<string | null>(null);
+  const [backupData, setBackupData] = useState<BackupSummary>(backup);
+
+  const fetchDomains = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const response = await api.listDomains(backup.id, apiToken);
+      setDomains(response.domains);
+      if (response.domains.length > 0 && !selectedDomain) {
+        setSelectedDomain(response.domains[0]);
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load domains');
+    } finally {
+      setLoading(false);
+    }
+  }, [backup.id, apiToken, selectedDomain]);
+
+  const fetchFiles = useCallback(async () => {
+    if (!selectedDomain) return;
+    setLoading(true);
+    setError(null);
+    try {
+      const response = await api.listFiles(backup.id, apiToken, {
+        domain: selectedDomain,
+        path_like: searchTerm ? `%${searchTerm}%` : null,
+        limit: 200,
+      });
+      setFiles(response.items);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load files');
+    } finally {
+      setLoading(false);
+    }
+  }, [backup.id, apiToken, selectedDomain, searchTerm]);
+
+  const fetchWhatsAppChats = useCallback(async () => {
+    console.log('DEBUG: fetchWhatsAppChats called');
+    setLoading(true);
+    setError(null);
+    try {
+      const response = await api.listWhatsAppChats(backup.id, apiToken);
+      console.log('DEBUG: WhatsApp chats response:', response);
+      const sortedChats = response.items.sort((a, b) => {
+        const dateA = a.last_message_at ? new Date(a.last_message_at).getTime() : 0;
+        const dateB = b.last_message_at ? new Date(b.last_message_at).getTime() : 0;
+        return dateB - dateA;
+      });
+      setWhatsappChats(sortedChats);
+      if (sortedChats.length > 0 && !selectedChatGuid) {
+        setSelectedChatGuid(sortedChats[0].chat_guid);
+      }
+    } catch (err) {
+      console.error('DEBUG: Error fetching WhatsApp chats:', err);
+      setError(err instanceof Error ? err.message : 'Failed to load WhatsApp chats');
+    } finally {
+      setLoading(false);
+    }
+  }, [backup.id, apiToken, selectedChatGuid]);
+
+  const fetchWhatsAppMessages = useCallback(async () => {
+    if (!selectedChatGuid) return;
+    setLoading(true);
+    setError(null);
+    try {
+      const response = await api.listWhatsAppMessages(backup.id, selectedChatGuid, apiToken);
+      const sortedMessages = response.messages.sort((a, b) => {
+        const dateA = a.sent_at ? new Date(a.sent_at).getTime() : 0;
+        const dateB = b.sent_at ? new Date(b.sent_at).getTime() : 0;
+        return dateB - dateA;
+      });
+      setWhatsappMessages(sortedMessages);
+      setDisplayedMessages(sortedMessages.slice(0, MESSAGE_BATCH_SIZE));
+      setMessageOffset(MESSAGE_BATCH_SIZE);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load WhatsApp messages');
+    } finally {
+      setLoading(false);
+    }
+  }, [backup.id, selectedChatGuid, apiToken, MESSAGE_BATCH_SIZE]);
+
+  useEffect(() => {
+    if (activeModule === 'files') {
+      void fetchDomains();
+    }
+  }, [activeModule, fetchDomains]);
+
+  useEffect(() => {
+    if (activeModule === 'files') {
+      void fetchFiles();
+    }
+  }, [selectedDomain, searchTerm, activeModule, fetchFiles]);
+
+  useEffect(() => {
+    if (activeModule === 'whatsapp') {
+      void fetchWhatsAppChats();
+    }
+  }, [activeModule, fetchWhatsAppChats]);
+
+  useEffect(() => {
+    if (activeModule === 'whatsapp' && selectedChatGuid) {
+      void fetchWhatsAppMessages();
+    }
+  }, [selectedChatGuid, activeModule, fetchWhatsAppMessages]);
+
+  // Poll for backup status updates when indexing is in progress
+  useEffect(() => {
+    console.log('DEBUG: Polling effect triggered, backupData.status:', backupData.status);
+    if (backupData.status === 'indexing') {
+      const interval = setInterval(async () => {
+        try {
+          console.log('DEBUG: Polling for backup status...');
+          const response = await api.listBackups(apiToken);
+          const updatedBackup = response.backups.find(b => b.id === backup.id);
+          if (updatedBackup) {
+            console.log('DEBUG: Updated backup data:', updatedBackup);
+            setBackupData(updatedBackup);
+            // If indexing completed, refresh the WhatsApp chats
+            if (updatedBackup.status !== 'indexing' && activeModule === 'whatsapp') {
+              void fetchWhatsAppChats();
+            }
+          }
+        } catch (err) {
+          console.error('Failed to refresh backup status:', err);
+        }
+      }, 2000); // Poll every 2 seconds
+
+      return () => clearInterval(interval);
+    }
+  }, [backupData.status, backup.id, apiToken, activeModule, fetchWhatsAppChats]);
+
+  const loadMoreMessages = useCallback(() => {
+    if (messageOffset < whatsappMessages.length) {
+      const nextBatch = whatsappMessages.slice(0, messageOffset + MESSAGE_BATCH_SIZE);
+      setDisplayedMessages(nextBatch);
+      setMessageOffset(messageOffset + MESSAGE_BATCH_SIZE);
+    }
+  }, [whatsappMessages, messageOffset, MESSAGE_BATCH_SIZE]);
+
+  const handleMessagesScroll = useCallback((e: React.UIEvent<HTMLDivElement>) => {
+    const element = e.currentTarget;
+    if (element.scrollHeight - element.scrollTop <= element.clientHeight + 100) {
+      loadMoreMessages();
+    }
+  }, [loadMoreMessages]);
+
+  const filteredChats = whatsappChats.filter(chat => {
+    if (!chatSearchTerm) return true;
+    const title = chat.title?.toLowerCase() || '';
+    const guid = chat.chat_guid?.toLowerCase() || '';
+    const search = chatSearchTerm.toLowerCase();
+    return title.includes(search) || guid.includes(search);
+  });
+
+  const filteredMessages = displayedMessages.filter(msg => {
+    if (!messageSearchTerm) return true;
+    const body = msg.body?.toLowerCase() || '';
+    const sender = msg.sender?.toLowerCase() || '';
+    const search = messageSearchTerm.toLowerCase();
+    return body.includes(search) || sender.includes(search);
+  });
+
+  const handleDownloadFile = async (fileId: string) => {
+    try {
+      const response = await api.downloadFile(backup.id, fileId, apiToken);
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = fileId;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Download failed');
+    }
+  };
+
+  const handleDownloadAttachment = async (relativePath: string, filename: string) => {
+    try {
+      const response = await api.downloadWhatsAppAttachment(backup.id, relativePath, apiToken);
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Download failed');
+    }
+  };
+
+  const handlePreviewImage = async (relativePath: string, mimeType: string | null) => {
+    if (!mimeType?.startsWith('image/')) return;
+    try {
+      const response = await api.downloadWhatsAppAttachment(backup.id, relativePath, apiToken);
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      setPreviewImage(url);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Preview failed');
+    }
+  };
+
+  const AttachmentImage = ({ relativePath, filename, mimeType }: { relativePath: string; filename: string; mimeType: string | null }) => {
+    const [imageUrl, setImageUrl] = useState<string | null>(null);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
+
+    useEffect(() => {
+      let isMounted = true;
+      const loadImage = async () => {
+        console.log('Loading attachment:', relativePath);
+        try {
+          const response = await api.downloadWhatsAppAttachment(backup.id, relativePath, apiToken);
+          console.log('Got response:', response.status);
+          const blob = await response.blob();
+          console.log('Got blob, size:', blob.size, 'type:', blob.type);
+          const url = window.URL.createObjectURL(blob);
+          if (isMounted) {
+            setImageUrl(url);
+            setLoading(false);
+            setError(null);
+          }
+        } catch (err) {
+          console.error('Failed to load image:', err);
+          if (isMounted) {
+            setLoading(false);
+            setError(err instanceof Error ? err.message : 'Failed to load');
+          }
+        }
+      };
+      loadImage();
+      return () => {
+        isMounted = false;
+        if (imageUrl) window.URL.revokeObjectURL(imageUrl);
+      };
+    }, [relativePath, backup.id, apiToken]);
+
+    if (loading) {
+      return <div className="attachment-loading">Loading image...</div>;
+    }
+
+    if (error || !imageUrl) {
+      return <div className="attachment-error">Failed to load image: {error}</div>;
+    }
+
+    return (
+      <div className="attachment-image-wrapper">
+        <img 
+          src={imageUrl} 
+          alt={filename}
+          className="attachment-image"
+          onClick={() => handlePreviewImage(relativePath, mimeType)}
+        />
+        <button
+          className="attachment-download-overlay"
+          onClick={(e) => {
+            e.stopPropagation();
+            handleDownloadAttachment(relativePath, filename);
+          }}
+          title="Download"
+        >
+          ⬇️
+        </button>
+      </div>
+    );
+  };
+
+  return (
+    <div className="explorer">
+      <div className="explorer-header">
+        <div className="backup-info-card">
+          <div className="backup-title-line">
+            <h2>{backup.display_name}</h2>
+            {backup.device_name && <span className="device-name">{backup.device_name}</span>}
+            {backup.product_version && <span className="product-version">{backup.product_version}</span>}
+          </div>
+          <div className="backup-metadata">
+            <div className="metadata-item">
+              <span className="metadata-label">Backup ID:</span>
+              <span className="metadata-value">{backup.id}</span>
+            </div>
+            {backup.size_bytes && (
+              <div className="metadata-item">
+                <span className="metadata-label">Size:</span>
+                <span className="metadata-value">{(backup.size_bytes / (1024 * 1024 * 1024)).toFixed(2)} GB</span>
+              </div>
+            )}
+            {backup.last_modified_at && (
+              <div className="metadata-item">
+                <span className="metadata-label">Created:</span>
+                <span className="metadata-value">{new Date(backup.last_modified_at).toLocaleString()}</span>
+              </div>
+            )}
+            {backup.decrypted_at && (
+              <div className="metadata-item">
+                <span className="metadata-label">Decrypted:</span>
+                <span className="metadata-value">{new Date(backup.decrypted_at).toLocaleString()}</span>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      <div className="explorer-content">
+        <div className="module-selector">
+          <div className="module-tabs">
+            {MODULES.map((module) => (
+              <button
+                key={module.id}
+                className={`module-tab ${activeModule === module.id ? 'active' : ''}`}
+                onClick={() => setActiveModule(module.id)}
+              >
+                <span className="module-label">{module.label}</span>
+                <span className="module-description">{module.description}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="module-content">
+          {activeModule === 'files' && (
+            <div className="files-module">
+              <div className="files-controls">
+                <div className="domain-selector">
+                  <select
+                    id="domain-select"
+                    value={selectedDomain || ''}
+                    onChange={(e) => setSelectedDomain(e.target.value)}
+                    disabled={loading}
+                  >
+                    {domains.map((domain) => (
+                      <option key={domain} value={domain}>
+                        {domain}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="search-box search-box-wide">
+                  <input
+                    type="text"
+                    placeholder="Search files..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    disabled={loading}
+                  />
+                </div>
+              </div>
+
+              {error && <div className="error-message">{error}</div>}
+
+              {loading ? (
+                <div className="loading">Loading files...</div>
+              ) : files.length === 0 ? (
+                <div className="no-results">No files found in this domain.</div>
+              ) : (
+                <div className="files-list">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>File ID</th>
+                        <th>Path</th>
+                        <th>Size</th>
+                        <th>Action</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {files.map((file) => (
+                        <tr key={file.file_id}>
+                          <td className="file-id">{file.file_id}</td>
+                          <td className="file-path">{file.relative_path}</td>
+                          <td className="file-size">{file.size ? `${(file.size / 1024).toFixed(2)} KB` : 'N/A'}</td>
+                          <td className="file-action">
+                            <button
+                              onClick={() => handleDownloadFile(file.file_id)}
+                              className="download-btn"
+                            >
+                              Download
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          )}
+
+{activeModule === 'whatsapp' && (
+          <div className="whatsapp-module">
+            <div className="whatsapp-container">
+              <div className="whatsapp-chats-list">
+                <div className="whatsapp-header">
+                  <h3>WhatsApp Chats</h3>
+                </div>
+                <div>
+                  <input
+                    type="text"
+                    placeholder="Search chats..."
+                    value={chatSearchTerm}
+                    onChange={(e) => setChatSearchTerm(e.target.value)}
+                    className="search-input"
+                  />
+                </div>
+                {loading && !whatsappChats.length ? (
+                  <div className="loading">
+                    {backupData.status === 'indexing' && backupData.indexing_artifact ? (
+                      <div>
+                        <div>
+                          {backupData.indexing_artifact === 'whatsapp' ? (
+                            <div>
+                              <div>📱 Indexing WhatsApp messages...</div>
+                              {backupData.indexing_progress !== undefined && backupData.indexing_progress !== null && backupData.indexing_total ? (
+                                <div className="progress-bar">
+                                  <div 
+                                    className="progress-fill" 
+                                    style={{ width: `${(backupData.indexing_progress / backupData.indexing_total) * 100}%` }}
+                                  />
+                                  <div className="progress-text">
+                                    {Math.round((backupData.indexing_progress / backupData.indexing_total) * 100)}% ({backupData.indexing_progress}/{backupData.indexing_total})
+                                  </div>
+                                </div>
+                              ) : null}
+                            </div>
+                          ) : (
+                            <div>
+                              <div>Indexing {backupData.indexing_artifact}...</div>
+                              <div style={{ fontSize: '0.85rem', marginTop: '0.5rem', opacity: 0.7 }}>
+                                WhatsApp messages will be available after indexing completes
+                              </div>
+                              {backupData.indexing_progress !== undefined && backupData.indexing_progress !== null && backupData.indexing_total ? (
+                                <div className="progress-bar">
+                                  <div 
+                                    className="progress-fill" 
+                                    style={{ width: `${(backupData.indexing_progress / backupData.indexing_total) * 100}%` }}
+                                  />
+                                  <div className="progress-text">
+                                    {Math.round((backupData.indexing_progress / backupData.indexing_total) * 100)}%
+                                  </div>
+                                </div>
+                              ) : null}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    ) : (
+                      'Loading chats...'
+                    )}
+                  </div>
+                ) : whatsappChats.length === 0 ? (
+                  <div className="no-results">
+                    {backupData.status === 'indexing' ? (
+                      <div>
+                        <div>
+                          {backupData.indexing_artifact === 'whatsapp' ? (
+                            <div>
+                              <div>📱 Indexing WhatsApp messages...</div>
+                              {backupData.indexing_progress !== undefined && backupData.indexing_progress !== null && backupData.indexing_total ? (
+                                <div className="progress-bar">
+                                  <div 
+                                    className="progress-fill" 
+                                    style={{ width: `${(backupData.indexing_progress / backupData.indexing_total) * 100}%` }}
+                                  />
+                                  <div className="progress-text">
+                                    {Math.round((backupData.indexing_progress / backupData.indexing_total) * 100)}% ({backupData.indexing_progress}/{backupData.indexing_total})
+                                  </div>
+                                </div>
+                              ) : null}
+                            </div>
+                          ) : (
+                            <div>
+                              <div>Indexing {backupData.indexing_artifact}...</div>
+                              <div style={{ fontSize: '0.85rem', marginTop: '0.5rem', opacity: 0.7 }}>
+                                WhatsApp messages will be available after indexing completes
+                              </div>
+                              {backupData.indexing_artifact && <div style={{ fontSize: '0.8rem', marginTop: '0.25rem', opacity: 0.6 }}>Currently indexing: {backupData.indexing_artifact}</div>}
+                              {backupData.indexing_progress !== undefined && backupData.indexing_progress !== null && backupData.indexing_total ? (
+                                <div className="progress-bar">
+                                  <div 
+                                    className="progress-fill" 
+                                    style={{ width: `${(backupData.indexing_progress / backupData.indexing_total) * 100}%` }}
+                                  />
+                                  <div className="progress-text">
+                                    {Math.round((backupData.indexing_progress / backupData.indexing_total) * 100)}%
+                                  </div>
+                                </div>
+                              ) : null}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    ) : (
+                      <div>
+                        <div>No WhatsApp chats found</div>
+                        <div style={{ fontSize: '0.85rem', marginTop: '0.5rem', opacity: 0.7 }}>
+                          This may mean no WhatsApp data exists in this backup, or it hasn't been indexed yet.
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="chats-list scrollable">
+                    {filteredChats.map((chat) => (
+                      <button
+                        key={chat.chat_guid}
+                        className={`chat-item ${selectedChatGuid === chat.chat_guid ? 'active' : ''}`}
+                        onClick={() => setSelectedChatGuid(chat.chat_guid)}
+                      >
+                        <div className="chat-title">{chat.title || chat.chat_guid}</div>
+                        {chat.last_message_at && (
+                          <div className="chat-date">
+                            {new Date(chat.last_message_at).toLocaleDateString()}
+                          </div>
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <div className="whatsapp-messages">
+                {selectedChatGuid ? (
+                  <>
+                    <div className="whatsapp-header">
+                      <h3>
+                        {whatsappChats.find(c => c.chat_guid === selectedChatGuid)?.title || selectedChatGuid}
+                      </h3>
+                      <div>
+                        <input
+                          type="text"
+                          placeholder="Search messages..."
+                          value={messageSearchTerm}
+                          onChange={(e) => setMessageSearchTerm(e.target.value)}
+                          className="search-input search-box-wide"
+                        />
+                      </div>
+                    </div>
+                    {loading && <div className="loading">Loading messages...</div>}
+                    {error && <div className="error-message">{error}</div>}
+                    {!loading && !error && (
+                      <div className="messages-list scrollable" onScroll={handleMessagesScroll}>
+                        {displayedMessages.map((message, index) => (
+                          <div
+                            key={message.message_id || index}
+                            className={`message ${message.is_from_me ? 'from-me' : 'from-other'}`}
+                          >
+                            {!message.is_from_me && message.contact_name && (
+                              <div className="message-sender">{message.contact_name}</div>
+                            )}
+                            <div className="message-body">{message.text}</div>
+                            {message.attachments && message.attachments.length > 0 && (
+                              <div className="message-attachments">
+                                {message.attachments.map((attachment: WhatsAppAttachment) => (
+                                  <div key={attachment.attachment_id} className="attachment-inline">
+                                    {renderAttachment(attachment)}
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                            <div className="message-time">
+                              {message.timestamp && new Date(message.timestamp).toLocaleString()}
+                            </div>
+                          </div>
+                        ))}
+                        {messageOffset < whatsappMessages.length && (
+                          <div className="load-more-indicator">
+                            <button onClick={loadMoreMessages} className="download-btn">
+                              Load More Messages
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <div className="no-results">
+                    Select a chat to view messages
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {activeModule === 'messages' && (
+          <div className="coming-soon">
+            <h3>Messages</h3>
+            <p>iMessage and SMS functionality coming soon...</p>
+          </div>
+        )}
+
+        {activeModule === 'photos' && (
+          <div className="coming-soon">
+            <h3>Photos</h3>
+            <p>Photos timeline coming soon...</p>
+          </div>
+        )}
+
+        {activeModule === 'notes' && (
+          <div className="coming-soon">
+            <h3>Notes</h3>
+            <p>Notes functionality coming soon...</p>
+          </div>
+        )}
+
+        {activeModule === 'calendar' && (
+          <div className="coming-soon">
+            <h3>Calendar</h3>
+            <p>Calendar events coming soon...</p>
+          </div>
+        )}
+
+        {activeModule === 'contacts' && (
+          <div className="coming-soon">
+            <h3>Contacts</h3>
+            <p>Address book coming soon...</p>
+          </div>
+        )}
+      </div>
+
+      {previewImage && (
+        <div className="image-preview-modal" onClick={() => setPreviewImage(null)}>
+          <div className="image-preview-content" onClick={(e: React.MouseEvent) => e.stopPropagation()}>
+            <button className="image-preview-close" onClick={() => setPreviewImage(null)}>
+              ✕
+            </button>
+            <img src={previewImage || ''} alt="Preview" />
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+            <div className="whatsapp-container">
+              <div className="whatsapp-chats-list">
+                <div className="whatsapp-header">
+                  <h3>WhatsApp Chats</h3>
+                </div>
+                <div>
+                  <input
+                    type="text"
+                    placeholder="Search chats..."
+                    value={chatSearchTerm}
+                    onChange={(e) => setChatSearchTerm(e.target.value)}
+                    className="search-input"
+                  />
+                </div>
+                {loading && !whatsappChats.length ? (
+<div className="loading">
+{backupData.status === 'indexing' && backupData.indexing_artifact ? (
+<div>
+<div>
+{backupData.indexing_artifact === 'whatsapp' ? (
+<div>
+<div> Indexing WhatsApp messages...</div>
+{backupData.indexing_progress !== undefined && backupData.indexing_progress !== null && backupData.indexing_total ? (
+<div className="progress-bar">
+<div 
+className="progress-fill" 
+style={{ width: `${(backupData.indexing_progress / backupData.indexing_total) * 100}%` }}
+/>
+<div className="progress-text">
+{Math.round((backupData.indexing_progress / backupData.indexing_total) * 100)}% ({backupData.indexing_progress}/{backupData.indexing_total})
+</div>
+</div>
+) : null}
+</div>
+) : (
+<div>
+<div>Indexing {backupData.indexing_artifact}...</div>
+<div style={{ fontSize: '0.85rem', marginTop: '0.5rem', opacity: 0.7 }}>
+WhatsApp messages will be available after indexing completes
+</div>
+{backupData.indexing_progress !== undefined && backupData.indexing_progress !== null && backupData.indexing_total ? (
+<div className="progress-bar">
+<div 
+className="progress-fill" 
+style={{ width: `${(backupData.indexing_progress / backupData.indexing_total) * 100}%` }}
+/>
+<div className="progress-text">
+{Math.round((backupData.indexing_progress / backupData.indexing_total) * 100)}%
+</div>
+</div>
+) : null}
+</div>
+)}
+</div>
+</div>
+) : (
+'Loading chats...'
+)}
+</div>
+) : whatsappChats.length === 0 ? (
+<div className="no-results">
+{backupData.status === 'indexing' ? (
+<div>
+<div>
+{backupData.indexing_artifact === 'whatsapp' ? (
+<div>
+<div> Indexing WhatsApp messages...</div>
+{backupData.indexing_progress !== undefined && backupData.indexing_progress !== null && backupData.indexing_total ? (
+<div className="progress-bar">
+<div 
+className="progress-fill" 
+style={{ width: `${(backupData.indexing_progress / backupData.indexing_total) * 100}%` }}
+/>
+<div className="progress-text">
+{Math.round((backupData.indexing_progress / backupData.indexing_total) * 100)}% ({backupData.indexing_progress}/{backupData.indexing_total})
+</div>
+</div>
+) : null}
+</div>
+) : (
+<div>
+<div>Indexing {backupData.indexing_artifact}...</div>
+<div style={{ fontSize: '0.85rem', marginTop: '0.5rem', opacity: 0.7 }}>
+WhatsApp messages will be available after indexing completes
+</div>
+{backupData.indexing_artifact && <div style={{ fontSize: '0.8rem', marginTop: '0.25rem', opacity: 0.6 }}>Currently indexing: {backupData.indexing_artifact}</div>}
+{backupData.indexing_progress !== undefined && backupData.indexing_progress !== null && backupData.indexing_total ? (
+<div className="progress-bar">
+<div 
+className="progress-fill" 
+style={{ width: `${(backupData.indexing_progress / backupData.indexing_total) * 100}%` }}
+/>
+<div className="progress-text">
+{Math.round((backupData.indexing_progress / backupData.indexing_total) * 100)}%
+</div>
+</div>
+) : null}
+</div>
+)}
+</div>
+</div>
+) : (
+<div>
+<div>No WhatsApp chats found</div>
+<div style={{ fontSize: '0.85rem', marginTop: '0.5rem', opacity: 0.7 }}>
+This may mean no WhatsApp data exists in this backup, or it hasn't been indexed yet.
+</div>
+</div>
+)}
+</div>
+) : (
+<div className="chats-list scrollable">
+{filteredChats.map((chat) => (
+<button
+key={chat.chat_guid}
+className={`chat-item ${selectedChatGuid === chat.chat_guid ? 'active' : ''}`}
+onClick={() => setSelectedChatGuid(chat.chat_guid)}
+>
+<div className="chat-title">{chat.title || chat.chat_guid}</div>
+{chat.last_message_at && (
+<div className="chat-date">
+{new Date(chat.last_message_at).toLocaleDateString()}
+</div>
+)}
+</button>
+))}
+</div>
+)}
+</div>
+                      value={chatSearchTerm}
+                      onChange={(e) => setChatSearchTerm(e.target.value)}
+                      className="search-input"
+                    />
+                  </div>
+                  {loading && !whatsappChats.length ? (
+                    <div className="loading">
+                      {backupData.status === 'indexing' && backupData.indexing_artifact ? (
+                        <div>
+                          <div>
+                            {backupData.indexing_artifact === 'whatsapp' ? (
+                              <div>
+                                <div>📱 Indexing WhatsApp messages...</div>
+                                {backupData.indexing_progress !== undefined && backupData.indexing_progress !== null && backupData.indexing_total ? (
+                                  <div className="progress-bar">
+                                    <div 
+                                      className="progress-fill" 
+                                      style={{ width: `${(backupData.indexing_progress / backupData.indexing_total) * 100}%` }}
+                                    />
+                                    <div className="progress-text">
+                                      {Math.round((backupData.indexing_progress / backupData.indexing_total) * 100)}% ({backupData.indexing_progress}/{backupData.indexing_total})
+                                    </div>
+                                  </div>
+                                ) : null}
+                              </div>
+                            ) : (
+                              <div>
+                                <div>Indexing {backupData.indexing_artifact}...</div>
+                                <div style={{ fontSize: '0.85rem', marginTop: '0.5rem', opacity: 0.7 }}>
+                                  WhatsApp messages will be available after indexing completes
+                                </div>
+                                {backupData.indexing_progress !== undefined && backupData.indexing_progress !== null && backupData.indexing_total ? (
+                                  <div className="progress-bar">
+                                    <div 
+                                      className="progress-fill" 
+                                      style={{ width: `${(backupData.indexing_progress / backupData.indexing_total) * 100}%` }}
+                                    />
+                                    <div className="progress-text">
+                                      {Math.round((backupData.indexing_progress / backupData.indexing_total) * 100)}%
+                                    </div>
+                                  </div>
+                                ) : null}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      ) : (
+                        'Loading chats...'
+                      )}
+                    </div>
+                  ) : whatsappChats.length === 0 ? (
+                    <div className="no-results">
+                      {backupData.status === 'indexing' ? (
+                        <div>
+                          <div>
+                            {backupData.indexing_artifact === 'whatsapp' ? (
+                              <div>
+                                <div>📱 Indexing WhatsApp messages...</div>
+                                {backupData.indexing_progress !== undefined && backupData.indexing_progress !== null && backupData.indexing_total ? (
+                                  <div className="progress-bar">
+                                    <div 
+                                      className="progress-fill" 
+                                      style={{ width: `${(backupData.indexing_progress / backupData.indexing_total) * 100}%` }}
+                                    />
+                                    <div className="progress-text">
+                                      {Math.round((backupData.indexing_progress / backupData.indexing_total) * 100)}% ({backupData.indexing_progress}/{backupData.indexing_total})
+                                    </div>
+                                  </div>
+                                ) : null}
+                              </div>
+                            ) : (
+                              <div>
+                                <div>Indexing {backupData.indexing_artifact}...</div>
+                                <div style={{ fontSize: '0.85rem', marginTop: '0.5rem', opacity: 0.7 }}>
+                                  WhatsApp messages will be available after indexing completes
+                                </div>
+                                {backupData.indexing_artifact && <div style={{ fontSize: '0.8rem', marginTop: '0.25rem', opacity: 0.6 }}>Currently indexing: {backupData.indexing_artifact}</div>}
+                                {backupData.indexing_progress !== undefined && backupData.indexing_progress !== null && backupData.indexing_total ? (
+                                  <div className="progress-bar">
+                                    <div 
+                                      className="progress-fill" 
+                                      style={{ width: `${(backupData.indexing_progress / backupData.indexing_total) * 100}%` }}
+                                    />
+                                    <div className="progress-text">
+                                      {Math.round((backupData.indexing_progress / backupData.indexing_total) * 100)}%
+                                    </div>
+                                  </div>
+                                ) : null}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      ) : (
+                        <div>
+                          <div>No WhatsApp chats found</div>
+                          <div style={{ fontSize: '0.85rem', marginTop: '0.5rem', opacity: 0.7 }}>
+                            This may mean no WhatsApp data exists in this backup, or it hasn't been indexed yet.
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="chats-list scrollable">
+                      {filteredChats.map((chat) => (
+                        <button
+                          key={chat.chat_guid}
+                          className={`chat-item ${selectedChatGuid === chat.chat_guid ? 'active' : ''}`}
+                          onClick={() => setSelectedChatGuid(chat.chat_guid)}
+                        >
+                          <div className="chat-title">{chat.title || chat.chat_guid}</div>
+                          {chat.last_message_at && (
+                            <div className="chat-date">
+                              {new Date(chat.last_message_at).toLocaleDateString()}
+                            </div>
+                          )}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                <div className="whatsapp-messages">
+                  {selectedChatGuid ? (
+                    <>
+                      <div className="whatsapp-header">
+                        <h3>Messages ({whatsappMessages.length})</h3>
+                        <input
+                          type="text"
+                          placeholder="Search messages..."
+                          value={messageSearchTerm}
+                          onChange={(e) => setMessageSearchTerm(e.target.value)}
+                          className="search-input"
+                        />
+                      </div>
+                      {loading && !whatsappMessages.length ? (
+                        <div className="loading">Loading messages...</div>
+                      ) : whatsappMessages.length === 0 ? (
+                        <div className="no-results">No messages in this chat</div>
+                      ) : (
+                        <div className="messages-list scrollable" onScroll={handleMessagesScroll}>
+                          {filteredMessages.map((msg) => (
+                            <div key={msg.message_id} className={`message ${msg.is_from_me ? 'from-me' : 'from-other'}`}>
+                              <div className="message-sender">{msg.sender || 'Me'}</div>
+                              <div className="message-body">{msg.body}</div>
+                              {msg.attachments && msg.attachments.length > 0 && (
+                                <div className="message-attachments">
+                                  {msg.attachments
+                                    .filter((att: any) => att.relative_path || att.file_id) // Only show attachments with actual data
+                                    .map((att: any, idx: number) => {
+                                    const filename = att.relative_path?.split('/').pop() || att.file_id || 'Attachment';
+                                    const isImage = att.mime_type?.startsWith('image/');
+                                    const isVideo = att.mime_type?.startsWith('video/');
+                                    const isAudio = att.mime_type?.startsWith('audio/');
+                                    
+                                    return (
+                                      <div key={idx} className="attachment-inline">
+                                        {isImage && att.relative_path ? (
+                                          <AttachmentImage 
+                                            relativePath={att.relative_path}
+                                            filename={filename}
+                                            mimeType={att.mime_type}
+                                          />
+                                        ) : (
+                                          <div className="attachment-file">
+                                            <span className="attachment-icon">
+                                              {isVideo ? '🎥' : isAudio ? '🎵' : '📎'}
+                                            </span>
+                                            <span className="attachment-name">{filename}</span>
+                                            {att.size_bytes && (
+                                              <span className="attachment-size">
+                                                ({(att.size_bytes / 1024).toFixed(1)} KB)
+                                              </span>
+                                            )}
+                                            {att.mime_type && (
+                                              <span className="attachment-type">
+                                                {att.mime_type}
+                                              </span>
+                                            )}
+                                            {att.relative_path && (
+                                              <button
+                                                className="attachment-download-btn-small"
+                                                onClick={() => handleDownloadAttachment(att.relative_path, filename)}
+                                                title="Download"
+                                              >
+                                                ⬇️
+                                              </button>
+                                            )}
+                                          </div>
+                                        )}
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              )}
+                              {msg.sent_at && (
+                                <div className="message-time">
+                                  {new Date(msg.sent_at).toLocaleString()}
+                                </div>
+                              )}
+                            </div>
+                          ))}
+                          {messageOffset < whatsappMessages.length && (
+                            <div className="load-more-indicator">Loading more messages...</div>
+                          )}
+                        </div>
+                      )}
+                    </>
+                  ) : (
+                    <div className="no-results">Select a chat to view messages</div>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {activeModule !== 'files' && activeModule !== 'whatsapp' && (
+            <div className="coming-soon">
+              <h3>{MODULES.find((m) => m.id === activeModule)?.label} Module</h3>
+              <p>Coming soon...</p>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {previewImage && (
+        <div className="image-preview-modal" onClick={() => setPreviewImage(null)}>
+          <div className="image-preview-content" onClick={(e) => e.stopPropagation()}>
+            <button className="image-preview-close" onClick={() => setPreviewImage(null)}>
+              ✕
+            </button>
+            <img src={previewImage} alt="Preview" />
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}

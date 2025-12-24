@@ -21,6 +21,9 @@ class BackupSummaryModel(BaseModel):
     decrypted_at: Optional[datetime] = None
     size_bytes: Optional[int] = None
     last_modified_at: Optional[datetime] = None
+    indexing_progress: Optional[int] = None
+    indexing_total: Optional[int] = None
+    indexing_artifact: Optional[str] = None
 
 
 class DiscoverResponse(BaseModel):
@@ -74,15 +77,25 @@ class WhatsAppChatModel(BaseModel):
     metadata: Optional[dict[str, Any]] = None
 
 
+class WhatsAppAttachmentModel(BaseModel):
+    file_id: Optional[str] = None
+    relative_path: Optional[str] = None
+    mime_type: Optional[str] = None
+    size_bytes: Optional[int] = None
+    metadata: Optional[dict[str, Any]] = None
+
+
 class WhatsAppMessageModel(BaseModel):
     chat_guid: str
     message_id: str
     sender: Optional[str] = None
+    sender_name: Optional[str] = None
     sent_at: Optional[datetime] = None
     message_type: Optional[str] = None
     body: Optional[str] = None
     is_from_me: bool
     has_attachments: bool
+    attachments: list[WhatsAppAttachmentModel] = []
     metadata: Optional[dict[str, Any]] = None
 
 

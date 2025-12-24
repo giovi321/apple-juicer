@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WhatsApp Progress Bar Test</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(180deg, rgba(15, 17, 20, 0.8), rgba(11, 12, 14, 0.95));
+            color: #f5f6fa;
+            margin: 0;
+            padding: 2rem;
+        }
+
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: rgba(18, 20, 26, 0.85);
+            border: 1px solid rgba(255, 139, 60, 0.1);
+            border-radius: 18px;
+            padding: 2rem;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+        }
+
+        .module-content {
+            display: flex;
+            flex-direction: column;
+            gap: 1.5rem;
+        }
+
+        .whatsapp-header {
+            display: flex;
+            flex-direction: column;
+            gap: 0.75rem;
+            margin-bottom: 1rem;
+            padding-bottom: 0.75rem;
+            border-bottom: 1px solid rgba(255, 139, 60, 0.1);
+        }
+
+        .whatsapp-header h3 {
+            margin: 0;
+            font-size: 0.95rem;
+            color: #f5f6fa;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            font-weight: 600;
+        }
+
+        .no-results {
+            padding: 2rem;
+            text-align: center;
+            color: rgba(245, 246, 250, 0.65);
+            font-size: 1rem;
+        }
+
+        .progress-bar {
+            position: relative;
+            width: 100%;
+            height: 24px;
+            background: rgba(21, 23, 29, 0.8);
+            border: 1px solid rgba(255, 139, 60, 0.2);
+            border-radius: 12px;
+            overflow: hidden;
+            margin-top: 0.75rem;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #ff8b3c, #ffb347);
+            transition: width 0.3s ease;
+            border-radius: 12px;
+        }
+
+        .progress-text {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 0.75rem;
+            font-weight: 600;
+            color: #f5f6fa;
+            text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+        }
+
+        .debug {
+            font-size: 0.75rem;
+            opacity: 0.5;
+            margin-bottom: 1rem;
+        }
+
+        .controls {
+            display: flex;
+            gap: 1rem;
+            margin-bottom: 2rem;
+        }
+
+        button {
+            background: rgba(255, 139, 60, 0.15);
+            border: 1px solid rgba(255, 139, 60, 0.2);
+            padding: 0.75rem 1.5rem;
+            border-radius: 10px;
+            font-size: 1rem;
+            cursor: pointer;
+            transition: all 0.2s;
+            color: #ff8b3c;
+            font-weight: 600;
+        }
+
+        button:hover {
+            background: rgba(255, 139, 60, 0.25);
+            border-color: rgba(255, 139, 60, 0.4);
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>WhatsApp Progress Bar Test</h1>
+        
+        <div class="controls">
+            <button onclick="simulateIndexing()">Simulate WhatsApp Indexing</button>
+            <button onclick="simulateOtherIndexing()">Simulate Other Indexing</button>
+            <button onclick="simulateCompleted()">Simulate Completed</button>
+            <button onclick="simulateNoData()">Simulate No Data</button>
+        </div>
+
+        <div class="module-content">
+            <div class="whatsapp-header">
+                <h3>WhatsApp Chats</h3>
+            </div>
+            
+            <div id="whatsapp-content">
+                <div class="no-results">
+                    <div class="debug" id="debug-info">
+                        DEBUG: backupData.status=completed, indexing_artifact=null, progress=null, total=null
+                    </div>
+                    <div>No WhatsApp chats found</div>
+                    <div style="font-size: 0.85rem; margin-top: 0.5rem; opacity: 0.7">
+                        This may mean no WhatsApp data exists in this backup, or it hasn't been indexed yet.
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let currentProgress = 0;
+        let progressInterval = null;
+
+        function updateDisplay(status, artifact, progress, total) {
+            const debugInfo = document.getElementById('debug-info');
+            const content = document.getElementById('whatsapp-content');
+            
+            debugInfo.textContent = `DEBUG: backupData.status=${status}, indexing_artifact=${artifact}, progress=${progress}, total=${total}`;
+            
+            let html = '';
+            
+            if (status === 'indexing' && artifact) {
+                html = `
+                    <div class="no-results">
+                        <div class="debug" id="debug-info">${debugInfo.textContent}</div>
+                        <div>
+                            <div>
+                                ${artifact === 'whatsapp' ? `
+                                    <div>
+                                        <div>📱 Indexing WhatsApp messages...</div>
+                                        ${progress !== null && progress !== undefined && total ? `
+                                            <div class="progress-bar">
+                                                <div class="progress-fill" style="width: ${(progress / total) * 100}%"></div>
+                                                <div class="progress-text">${Math.round((progress / total) * 100)}% (${progress}/${total})</div>
+                                            </div>
+                                        ` : ''}
+                                    </div>
+                                ` : `
+                                    <div>
+                                        <div>Indexing ${artifact}...</div>
+                                        <div style="font-size: 0.85rem; margin-top: 0.5rem; opacity: 0.7">
+                                            WhatsApp messages will be available after indexing completes
+                                        </div>
+                                        ${progress !== null && progress !== undefined && total ? `
+                                            <div class="progress-bar">
+                                                <div class="progress-fill" style="width: ${(progress / total) * 100}%"></div>
+                                                <div class="progress-text">${Math.round((progress / total) * 100)}%</div>
+                                            </div>
+                                        ` : ''}
+                                    </div>
+                                `}
+                            </div>
+                        </div>
+                    </div>
+                `;
+            } else {
+                html = `
+                    <div class="no-results">
+                        <div class="debug" id="debug-info">${debugInfo.textContent}</div>
+                        <div>
+                            <div>No WhatsApp chats found</div>
+                            <div style="font-size: 0.85rem; margin-top: 0.5rem; opacity: 0.7">
+                                This may mean no WhatsApp data exists in this backup, or it hasn't been indexed yet.
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }
+            
+            content.innerHTML = html;
+        }
+
+        function simulateIndexing() {
+            clearInterval(progressInterval);
+            currentProgress = 0;
+            
+            progressInterval = setInterval(() => {
+                currentProgress++;
+                if (currentProgress <= 4) {
+                    updateDisplay('indexing', 'whatsapp', currentProgress, 4);
+                } else {
+                    clearInterval(progressInterval);
+                    updateDisplay('completed', null, null, null);
+                }
+            }, 1000);
+        }
+
+        function simulateOtherIndexing() {
+            clearInterval(progressInterval);
+            currentProgress = 0;
+            
+            progressInterval = setInterval(() => {
+                currentProgress++;
+                if (currentProgress <= 6) {
+                    updateDisplay('indexing', 'photos', currentProgress, 6);
+                } else {
+                    clearInterval(progressInterval);
+                    updateDisplay('completed', null, null, null);
+                }
+            }, 800);
+        }
+
+        function simulateCompleted() {
+            clearInterval(progressInterval);
+            updateDisplay('completed', null, null, null);
+        }
+
+        function simulateNoData() {
+            clearInterval(progressInterval);
+            updateDisplay('completed', null, null, null);
+        }
+
+        // Initialize with completed state
+        updateDisplay('completed', null, null, null);
+    </script>
+</body>
+</html>

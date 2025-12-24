@@ -53,6 +53,8 @@ class DecryptOrchestrator:
             )
             handle.test_decryption()
 
+            settings = get_settings()
+
             manifest_db_path = decrypted_backup_dir / "Manifest.db"
             if manifest_db_path.exists():
                 manifest_db_path.unlink()
