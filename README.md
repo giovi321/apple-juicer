@@ -4,12 +4,12 @@ A full-stack web application for extracting and analyzing data from iOS (Finder/
 
 ## Features
 
-- 🔍 **Backup Discovery** - Automatically discover and index iOS backups
-- 🔐 **Decryption** - Decrypt encrypted backups with password
-- 📱 **Artifact Parsing** - Extract and browse WhatsApp, Messages, Photos, Notes, Calendar, and Contacts
-- 🔎 **Search & Filter** - Search through manifest files and artifacts
-- 🎨 **Modern UI** - Clean, responsive interface built with React and TailwindCSS
-- 🐳 **Docker Ready** - Deploy with a single command using Docker Compose
+- **Backup Discovery** - Automatically discover and index iOS backups
+- **Decryption** - Decrypt encrypted backups with password prompts
+- **Artifact Parsing** - Extract and browse WhatsApp, Messages, Photos, Notes, Calendar, and Contacts
+- **Search & Filter** - Search through manifest files and artifacts
+- **Modern UI** - Clean, responsive interface built with React and TailwindCSS
+- **Docker Ready** - Deploy with a single command using Docker Compose
 
 ## Quick Start
 
@@ -92,7 +92,7 @@ See `.env.example` for all available configuration options. Key settings:
 
 ## License
 
-MIT License - see LICENSE file for details
+GNU General Public License v3.0 – see LICENSE for details
 
 ## Contributing
 

@@ -1,6 +1,6 @@
 # Architecture Overview
 
-iOS Backup Explorer is composed of five cooperating subsystems:
+Apple Juicer is composed of five cooperating subsystems:
 
 1. **FastAPI backend** – hosts REST endpoints for discovery, unlocking, manifest browsing, and artifact exports.
 2. **Redis + RQ worker** – runs asynchronous ingestion jobs that parse SQLite artifacts and populate Postgres.

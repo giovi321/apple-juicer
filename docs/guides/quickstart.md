@@ -11,8 +11,8 @@ Get the full stack running in under ten minutes with Docker Compose, or jump int
 ## 1. Clone the Repository
 
 ```bash
-git clone https://github.com/giovi321/ios-backup-explorer.git
-cd ios-backup-explorer
+git clone https://github.com/giovi321/apple-juicer.git
+cd apple-juicer
 ```
 
 ## 2. Fast Path: Docker Compose
@@ -21,8 +21,8 @@ cd ios-backup-explorer
 2. Export secrets (or create a `.env` file):
 
    ```bash
-   export IOS_BACKUP_SECURITY__API_TOKEN="dev-token"
-   export IOS_BACKUP_BACKUP_PATHS__BASE_PATH="/data/ios_backups"
+   export APPLE_JUICER_SECURITY__API_TOKEN="dev-token"
+   export APPLE_JUICER_BACKUP_PATHS__BASE_PATH="/data/ios_backups"
    ```
 
 3. Build and launch the stack:
@@ -55,8 +55,8 @@ Prefer running services directly for debugging? Follow the condensed steps below
 2. Provision Postgres + Redis (use containers or local services) and export env vars:
 
    ```bash
-   export IOS_BACKUP_POSTGRES__DSN="postgresql+asyncpg://postgres:postgres@localhost:5432/ios_backup_explorer"
-   export IOS_BACKUP_REDIS__URL="redis://localhost:6379/0"
+   export APPLE_JUICER_POSTGRES__DSN="postgresql+asyncpg://postgres:postgres@localhost:5432/apple_juicer"
+   export APPLE_JUICER_REDIS__URL="redis://localhost:6379/0"
    ```
 
 3. Run the backend API:
@@ -69,7 +69,7 @@ Prefer running services directly for debugging? Follow the condensed steps below
 
    ```bash
    rq worker default
-   # or ios-backup-worker
+   # or apple-juicer-worker
    ```
 
 5. Launch the frontend:
@@ -80,7 +80,7 @@ Prefer running services directly for debugging? Follow the condensed steps below
    npm run dev
    ```
 
-Visit `http://localhost:5173/`, paste the API token, and load backups from `IOS_BACKUP_BACKUP_PATHS__BASE_PATH`.
+Visit `http://localhost:5173/`, paste the API token, and load backups from `APPLE_JUICER_BACKUP_PATHS__BASE_PATH`.
 
 ## 4. Next Steps
 

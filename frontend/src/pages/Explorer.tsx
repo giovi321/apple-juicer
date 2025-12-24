@@ -3,6 +3,9 @@ import {
   api,
   type BackupSummary,
   type ManifestEntry,
+  type MessageAttachment,
+  type MessageConversation,
+  type MessageItem,
   type WhatsAppAttachment,
   type WhatsAppChat,
   type WhatsAppMessage,
@@ -52,6 +55,17 @@ export function Explorer({ apiToken, backup, sessionToken, onSessionToken }: Exp
   const [extracting, setExtracting] = useState(false);
   const [statusLoaded, setStatusLoaded] = useState(false);
   const [extractedChats, setExtractedChats] = useState<Set<string>>(new Set());
+
+  // Messages (iMessage/SMS) state
+  const [messageConversations, setMessageConversations] = useState<MessageConversation[]>([]);
+  const [selectedConversationGuid, setSelectedConversationGuid] = useState<string | null>(null);
+  const [imessageMessages, setImessageMessages] = useState<MessageItem[]>([]);
+  const [displayedImessages, setDisplayedImessages] = useState<MessageItem[]>([]);
+  const [imessageOffset, setImessageOffset] = useState(0);
+  const [conversationSearchTerm, setConversationSearchTerm] = useState('');
+  const [imessageSearchTerm, setImessageSearchTerm] = useState('');
+  const [extractedConversations, setExtractedConversations] = useState<Set<string>>(new Set());
+  const imessagesListRef = useRef<HTMLDivElement | null>(null);
 
   const fetchDomains = useCallback(async () => {
     setLoading(true);
@@ -133,6 +147,49 @@ export function Explorer({ apiToken, backup, sessionToken, onSessionToken }: Exp
     }
   }, [backup.id, selectedChatGuid, apiToken, MESSAGE_BATCH_SIZE]);
 
+  const fetchMessageConversations = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const response = await api.listMessageConversations(backup.id, apiToken);
+      const sortedConversations = response.items.sort((a, b) => {
+        const dateA = a.last_message_at ? new Date(a.last_message_at).getTime() : 0;
+        const dateB = b.last_message_at ? new Date(b.last_message_at).getTime() : 0;
+        return dateB - dateA;
+      });
+      setMessageConversations(sortedConversations);
+      if (sortedConversations.length > 0 && !selectedConversationGuid) {
+        setSelectedConversationGuid(sortedConversations[0].conversation_guid);
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load conversations');
+    } finally {
+      setLoading(false);
+    }
+  }, [backup.id, apiToken, selectedConversationGuid]);
+
+  const fetchImessageMessages = useCallback(async () => {
+    if (!selectedConversationGuid) return;
+    setLoading(true);
+    setError(null);
+    try {
+      const response = await api.listMessages(backup.id, selectedConversationGuid, apiToken);
+      const sortedMessages = [...response.messages].sort((a, b) => {
+        const dateA = a.sent_at ? new Date(a.sent_at).getTime() : 0;
+        const dateB = b.sent_at ? new Date(b.sent_at).getTime() : 0;
+        return dateA - dateB;
+      });
+      setImessageMessages(sortedMessages);
+      const initialOffset = Math.max(0, sortedMessages.length - MESSAGE_BATCH_SIZE);
+      setDisplayedImessages(sortedMessages.slice(initialOffset));
+      setImessageOffset(initialOffset);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load messages');
+    } finally {
+      setLoading(false);
+    }
+  }, [backup.id, selectedConversationGuid, apiToken, MESSAGE_BATCH_SIZE]);
+
   const filteredMessages = useMemo(() => {
     const term = messageSearchTerm.trim().toLowerCase();
     if (!term) return whatsappMessages;
@@ -143,6 +200,16 @@ export function Explorer({ apiToken, backup, sessionToken, onSessionToken }: Exp
     });
   }, [whatsappMessages, messageSearchTerm]);
 
+  const filteredImessages = useMemo(() => {
+    const term = imessageSearchTerm.trim().toLowerCase();
+    if (!term) return imessageMessages;
+    return imessageMessages.filter((m) => {
+      const text = (m.text ?? '').toLowerCase();
+      const sender = (m.sender ?? '').toLowerCase();
+      return text.includes(term) || sender.includes(term);
+    });
+  }, [imessageMessages, imessageSearchTerm]);
+
   useEffect(() => {
     const initialOffset = Math.max(0, filteredMessages.length - MESSAGE_BATCH_SIZE);
     setDisplayedMessages(filteredMessages.slice(initialOffset));
@@ -150,10 +217,22 @@ export function Explorer({ apiToken, backup, sessionToken, onSessionToken }: Exp
   }, [filteredMessages, MESSAGE_BATCH_SIZE]);
 
   useEffect(() => {
+    const initialOffset = Math.max(0, filteredImessages.length - MESSAGE_BATCH_SIZE);
+    setDisplayedImessages(filteredImessages.slice(initialOffset));
+    setImessageOffset(initialOffset);
+  }, [filteredImessages, MESSAGE_BATCH_SIZE]);
+
+  useEffect(() => {
     if (!messagesListRef.current) return;
     if (loading) return;
     messagesListRef.current.scrollTop = messagesListRef.current.scrollHeight;
   }, [selectedChatGuid, loading]);
+
+  useEffect(() => {
+    if (!imessagesListRef.current) return;
+    if (loading) return;
+    imessagesListRef.current.scrollTop = imessagesListRef.current.scrollHeight;
+  }, [selectedConversationGuid, loading]);
 
   useEffect(() => {
     if (activeModule === 'files') {
@@ -199,8 +278,39 @@ export function Explorer({ apiToken, backup, sessionToken, onSessionToken }: Exp
     }
   }, [selectedChatGuid, activeModule, fetchWhatsAppMessages]);
 
+  useEffect(() => {
+    if (activeModule === 'messages') {
+      setStatusLoaded(false);
+      api.listBackups(apiToken).then(response => {
+        const updatedBackup = response.backups.find(b => b.id === backup.id);
+        if (updatedBackup) {
+          setBackupData(updatedBackup);
+          const isIndexing = updatedBackup.indexing_artifact !== null && updatedBackup.indexing_artifact !== undefined;
+          if (!isIndexing) {
+            void fetchMessageConversations();
+          } else {
+            setMessageConversations([]);
+            setSelectedConversationGuid(null);
+          }
+        }
+        setStatusLoaded(true);
+      }).catch(err => {
+        console.error('Failed to refresh backup status:', err);
+        setStatusLoaded(true);
+      });
+    }
+  }, [activeModule, fetchMessageConversations, backup.id, apiToken]);
+
+  useEffect(() => {
+    if (activeModule === 'messages' && selectedConversationGuid) {
+      void fetchImessageMessages();
+    }
+  }, [selectedConversationGuid, activeModule, fetchImessageMessages]);
+
   // Poll for backup status updates when indexing is in progress
   const isIndexing = backupData.indexing_artifact !== null && backupData.indexing_artifact !== undefined;
+  const isIndexingWhatsApp = backupData.indexing_artifact === 'whatsapp';
+  const isIndexingMessages = backupData.indexing_artifact === 'messages';
   useEffect(() => {
     console.log('DEBUG: Polling effect triggered, indexing_artifact:', backupData.indexing_artifact);
     if (isIndexing) {
@@ -212,10 +322,14 @@ export function Explorer({ apiToken, backup, sessionToken, onSessionToken }: Exp
           if (updatedBackup) {
             console.log('DEBUG: Updated backup data:', updatedBackup);
             setBackupData(updatedBackup);
-            // If indexing completed, refresh the WhatsApp chats
+            // If indexing completed, refresh the appropriate module
             const isIndexing = updatedBackup.indexing_artifact !== null && updatedBackup.indexing_artifact !== undefined;
-            if (!isIndexing && activeModule === 'whatsapp') {
-              void fetchWhatsAppChats();
+            if (!isIndexing) {
+              if (activeModule === 'whatsapp') {
+                void fetchWhatsAppChats();
+              } else if (activeModule === 'messages') {
+                void fetchMessageConversations();
+              }
             }
           }
         } catch (err) {
@@ -225,7 +339,7 @@ export function Explorer({ apiToken, backup, sessionToken, onSessionToken }: Exp
 
       return () => clearInterval(interval);
     }
-  }, [isIndexing, backup.id, apiToken, activeModule, fetchWhatsAppChats]);
+  }, [isIndexing, backup.id, apiToken, activeModule, fetchWhatsAppChats, fetchMessageConversations]);
 
   const loadMoreMessages = useCallback(() => {
     if (messageOffset <= 0) return;
@@ -244,6 +358,23 @@ export function Explorer({ apiToken, backup, sessionToken, onSessionToken }: Exp
     [loadMoreMessages],
   );
 
+  const loadMoreImessages = useCallback(() => {
+    if (imessageOffset <= 0) return;
+    const nextOffset = Math.max(0, imessageOffset - MESSAGE_BATCH_SIZE);
+    setDisplayedImessages(filteredImessages.slice(nextOffset));
+    setImessageOffset(nextOffset);
+  }, [filteredImessages, imessageOffset, MESSAGE_BATCH_SIZE]);
+
+  const handleImessagesScroll = useCallback(
+    (e: React.UIEvent<HTMLDivElement>) => {
+      const element = e.currentTarget;
+      if (element.scrollTop <= 100) {
+        loadMoreImessages();
+      }
+    },
+    [loadMoreImessages],
+  );
+
   const filteredChats = whatsappChats.filter(chat => {
     if (!chatSearchTerm) return true;
     const title = chat.title?.toLowerCase() || '';
@@ -251,6 +382,21 @@ export function Explorer({ apiToken, backup, sessionToken, onSessionToken }: Exp
     const search = chatSearchTerm.toLowerCase();
     return title.includes(search) || guid.includes(search);
   });
+
+  const filteredConversations = messageConversations.filter(conv => {
+    if (!conversationSearchTerm) return true;
+    const name = conv.display_name?.toLowerCase() || '';
+    const guid = conv.conversation_guid?.toLowerCase() || '';
+    const handles = (conv.participant_handles || []).join(' ').toLowerCase();
+    const search = conversationSearchTerm.toLowerCase();
+    return name.includes(search) || guid.includes(search) || handles.includes(search);
+  });
+
+  const selectedConversation = useMemo(() => {
+    return messageConversations.find(c => c.conversation_guid === selectedConversationGuid) || null;
+  }, [messageConversations, selectedConversationGuid]);
+
+  const isConversationExtracted = selectedConversationGuid ? extractedConversations.has(selectedConversationGuid) : false;
 
   const handleDownloadFile = async (fileId: string) => {
     try {
@@ -344,6 +490,47 @@ export function Explorer({ apiToken, backup, sessionToken, onSessionToken }: Exp
     }
   };
 
+  const handleDownloadMessageAttachment = async (relativePath: string, filename: string) => {
+    try {
+      const response = await api.downloadMessageAttachment(backup.id, relativePath, apiToken, sessionToken);
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Download failed');
+    }
+  };
+
+  const handleExtractMessageFiles = async () => {
+    if (!sessionToken) {
+      setError('Please unlock the backup first to extract files');
+      return;
+    }
+    if (!selectedConversationGuid) {
+      setError('Please select a conversation first');
+      return;
+    }
+    setExtracting(true);
+    setError(null);
+    try {
+      const result = await api.extractMessageFiles(backup.id, selectedConversationGuid, apiToken, sessionToken);
+      setExtractedConversations(prev => new Set(prev).add(selectedConversationGuid));
+      const sizeMB = (result.extracted_bytes / 1024 / 1024).toFixed(2);
+      alert(`Extracted ${result.extracted_files} files (${sizeMB} MB) for this conversation. Attachments will now load.`);
+      void fetchImessageMessages();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Extraction failed');
+    } finally {
+      setExtracting(false);
+    }
+  };
+
   // Check if current chat has been extracted
   const isChatExtracted = selectedChatGuid ? extractedChats.has(selectedChatGuid) : false;
 
@@ -406,6 +593,19 @@ export function Explorer({ apiToken, backup, sessionToken, onSessionToken }: Exp
     const rp = attachment.relative_path ?? '';
     const last = rp.split('/').filter(Boolean).pop();
     return last || attachment.file_id || 'attachment';
+  };
+
+  const guessMessageAttachmentFilename = (attachment: MessageAttachment) => {
+    const rp = attachment.relative_path ?? '';
+    const last = rp.split('/').filter(Boolean).pop();
+    return last || attachment.file_id || 'attachment';
+  };
+
+  const formatMessageSender = (sender: string | null, isFromMe: boolean, conversationName?: string | null) => {
+    if (isFromMe) return 'You';
+    if (sender) return sender;
+    if (conversationName) return conversationName;
+    return 'Unknown';
   };
 
   const AttachmentImage = ({
@@ -603,6 +803,272 @@ export function Explorer({ apiToken, backup, sessionToken, onSessionToken }: Exp
     );
   };
 
+  const MessageAttachmentImage = ({
+    relativePath,
+    filename,
+  }: {
+    relativePath: string;
+    filename: string;
+    mimeType?: string | null;
+  }) => {
+    const [imageUrl, setImageUrl] = useState<string | null>(null);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
+
+    useEffect(() => {
+      let isMounted = true;
+      const loadImage = async () => {
+        try {
+          const response = await api.downloadMessageAttachment(backup.id, relativePath, apiToken, sessionToken);
+          const blob = await response.blob();
+          const url = window.URL.createObjectURL(blob);
+          if (isMounted) {
+            setImageUrl(url);
+            setLoading(false);
+            setError(null);
+          }
+        } catch (err) {
+          if (isMounted) {
+            setLoading(false);
+            setError(err instanceof Error ? err.message : 'Failed to load');
+          }
+        }
+      };
+      loadImage();
+      return () => {
+        isMounted = false;
+        if (imageUrl) window.URL.revokeObjectURL(imageUrl);
+      };
+    }, [relativePath, backup.id, apiToken, sessionToken]);
+
+    if (loading) {
+      return <div className="attachment-loading">Loading image...</div>;
+    }
+
+    if (error || !imageUrl) {
+      return <div className="attachment-error">Failed to load image: {error}</div>;
+    }
+
+    return (
+      <div className="attachment-image-wrapper">
+        <img 
+          src={imageUrl} 
+          alt={filename}
+          className="attachment-image"
+          onClick={() => {
+            const url = imageUrl;
+            setPreviewImage(url);
+          }}
+        />
+        <button
+          className="attachment-download-overlay"
+          onClick={(e) => {
+            e.stopPropagation();
+            handleDownloadMessageAttachment(relativePath, filename);
+          }}
+          title="Download"
+        >
+          ⬇️
+        </button>
+      </div>
+    );
+  };
+
+  const MessageAttachmentMedia = ({
+    relativePath,
+    mimeType,
+    kind,
+    filename,
+  }: {
+    relativePath: string;
+    mimeType: string | null;
+    kind: 'video' | 'audio';
+    filename: string;
+  }) => {
+    const [url, setUrl] = useState<string | null>(null);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
+    const audioRef = useRef<HTMLAudioElement | null>(null);
+    const [isPlaying, setIsPlaying] = useState(false);
+    const [duration, setDuration] = useState(0);
+    const [currentTime, setCurrentTime] = useState(0);
+
+    useEffect(() => {
+      let isMounted = true;
+      let objectUrl: string | null = null;
+      const load = async () => {
+        try {
+          const response = await api.downloadMessageAttachment(backup.id, relativePath, apiToken, sessionToken);
+          const blob = await response.blob();
+          objectUrl = window.URL.createObjectURL(blob);
+          if (isMounted) {
+            setUrl(objectUrl);
+            setLoading(false);
+          } else {
+            window.URL.revokeObjectURL(objectUrl);
+          }
+        } catch (e) {
+          if (isMounted) {
+            setLoading(false);
+            setError(e instanceof Error ? e.message : 'Failed to load media');
+          }
+        }
+      };
+      load();
+      return () => {
+        isMounted = false;
+        if (objectUrl) window.URL.revokeObjectURL(objectUrl);
+      };
+    }, [relativePath, backup.id, apiToken, sessionToken]);
+
+    useEffect(() => {
+      if (kind !== 'audio') return;
+      const el = audioRef.current;
+      if (!el) return;
+
+      const onLoaded = () => setDuration(Number.isFinite(el.duration) ? el.duration : 0);
+      const onTime = () => setCurrentTime(el.currentTime || 0);
+      const onEnded = () => setIsPlaying(false);
+      el.addEventListener('loadedmetadata', onLoaded);
+      el.addEventListener('timeupdate', onTime);
+      el.addEventListener('ended', onEnded);
+      return () => {
+        el.removeEventListener('loadedmetadata', onLoaded);
+        el.removeEventListener('timeupdate', onTime);
+        el.removeEventListener('ended', onEnded);
+      };
+    }, [kind, url]);
+
+    const toggleAudio = async () => {
+      const el = audioRef.current;
+      if (!el) return;
+      if (el.paused) {
+        await el.play();
+        setIsPlaying(true);
+      } else {
+        el.pause();
+        setIsPlaying(false);
+      }
+    };
+
+    const seekAudio = (value: number) => {
+      const el = audioRef.current;
+      if (!el) return;
+      el.currentTime = value;
+      setCurrentTime(value);
+    };
+
+    if (loading) return <div className="attachment-loading">Loading media...</div>;
+    if (error || !url) return <div className="attachment-error">Failed to load media: {error}</div>;
+
+    if (kind === 'video') {
+      return (
+        <div className="attachment-video-wrapper">
+          <video controls className="attachment-video">
+            <source src={url} type={mimeType ?? undefined} />
+          </video>
+          <button className="attachment-download-overlay" onClick={() => handleDownloadMessageAttachment(relativePath, filename)}>
+            ⬇️
+          </button>
+        </div>
+      );
+    }
+
+    return (
+      <div className="attachment-audio-wrapper">
+        <button className="audio-mini-btn" onClick={toggleAudio}>
+          {isPlaying ? 'Pause' : 'Play'}
+        </button>
+        <input
+          className="audio-mini-range"
+          type="range"
+          min={0}
+          max={duration || 0}
+          step={0.01}
+          value={Math.min(currentTime, duration || 0)}
+          onChange={(e) => seekAudio(Number(e.target.value))}
+        />
+        <audio ref={audioRef} preload="metadata" src={url} />
+        <button className="attachment-download-btn-small" onClick={() => handleDownloadMessageAttachment(relativePath, filename)}>
+          ⬇️
+        </button>
+      </div>
+    );
+  };
+
+  const renderMessageAttachment = (attachment: MessageAttachment) => {
+    if (!attachment.relative_path) {
+      return null;
+    }
+    const filename = guessMessageAttachmentFilename(attachment);
+
+    if (!isConversationExtracted) {
+      const icon = attachment.mime_type?.startsWith('image/') ? '🖼️' :
+                   attachment.mime_type?.startsWith('video/') ? '🎬' :
+                   attachment.mime_type?.startsWith('audio/') ? '🎵' : '📄';
+      return (
+        <div className="attachment-placeholder">
+          <span className="attachment-icon">{icon}</span>
+          <span className="attachment-name">{filename}</span>
+          <span className="attachment-size">
+            {attachment.size_bytes ? `${(attachment.size_bytes / 1024 / 1024).toFixed(1)} MB` : ''}
+          </span>
+          <span className="attachment-hint">Extract files to view</span>
+        </div>
+      );
+    }
+
+    if (attachment.mime_type?.startsWith('image/')) {
+      return (
+        <div className="attachment-image-wrapper">
+          <MessageAttachmentImage
+            relativePath={attachment.relative_path}
+            filename={filename}
+            mimeType={attachment.mime_type}
+          />
+        </div>
+      );
+    }
+
+    if (attachment.mime_type?.startsWith('video/')) {
+      return (
+        <MessageAttachmentMedia
+          relativePath={attachment.relative_path}
+          mimeType={attachment.mime_type}
+          kind="video"
+          filename={filename}
+        />
+      );
+    }
+
+    if (attachment.mime_type?.startsWith('audio/')) {
+      return (
+        <MessageAttachmentMedia
+          relativePath={attachment.relative_path}
+          mimeType={attachment.mime_type}
+          kind="audio"
+          filename={filename}
+        />
+      );
+    }
+
+    return (
+      <div className="attachment-file">
+        <span className="attachment-icon">📄</span>
+        <span className="attachment-name">{filename}</span>
+        <span className="attachment-size">
+          {attachment.size_bytes ? `${(attachment.size_bytes / 1024 / 1024).toFixed(1)} MB` : ''}
+        </span>
+        <button
+          className="attachment-download-btn-small"
+          onClick={() => handleDownloadMessageAttachment(attachment.relative_path ?? '', filename)}
+        >
+          ⬇️
+        </button>
+      </div>
+    );
+  };
+
   const renderAttachment = (attachment: WhatsAppAttachment) => {
     if (!attachment.relative_path) {
       return null;
@@ -766,6 +1232,7 @@ export function Explorer({ apiToken, backup, sessionToken, onSessionToken }: Exp
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
                     disabled={loading || extracting}
+                    autoComplete="off"
                   />
                 </div>
               </div>
@@ -818,7 +1285,7 @@ export function Explorer({ apiToken, backup, sessionToken, onSessionToken }: Exp
                 <div className="whatsapp-header">
                   <h3>WhatsApp Chats</h3>
                 </div>
-                <div>
+                <div style={{ marginBottom: '1rem' }}>
                   <input
                     type="text"
                     placeholder="Search chats..."
@@ -828,11 +1295,13 @@ export function Explorer({ apiToken, backup, sessionToken, onSessionToken }: Exp
                     disabled={extracting}
                   />
                 </div>
-                {!statusLoaded || isIndexing ? (
+                {!statusLoaded ? (
+                  <div className="loading">Loading...</div>
+                ) : isIndexingWhatsApp ? (
                   <div className="loading">
                     <div>
-                      <div>📱 {isIndexing ? `Indexing ${backupData.indexing_artifact}...` : 'Loading...'}</div>
-                      {isIndexing && backupData.indexing_progress !== undefined && backupData.indexing_progress !== null && backupData.indexing_total ? (
+                      <div>Indexing WhatsApp...</div>
+                      {backupData.indexing_progress !== undefined && backupData.indexing_progress !== null && backupData.indexing_total ? (
                         <>
                           <div className="progress-bar">
                             <div 
@@ -848,11 +1317,9 @@ export function Explorer({ apiToken, backup, sessionToken, onSessionToken }: Exp
                           </div>
                         </>
                       ) : null}
-                      {isIndexing && (
-                        <div style={{ fontSize: '0.85rem', marginTop: '0.5rem', opacity: 0.7 }}>
-                          Please wait while messages are being indexed...
-                        </div>
-                      )}
+                      <div style={{ fontSize: '0.85rem', marginTop: '0.5rem', opacity: 0.7 }}>
+                        Please wait while WhatsApp chats are being indexed...
+                      </div>
                     </div>
                   </div>
                 ) : loading && !whatsappChats.length ? (
@@ -993,9 +1460,188 @@ export function Explorer({ apiToken, backup, sessionToken, onSessionToken }: Exp
         )}
 
         {activeModule === 'messages' && (
-          <div className="coming-soon">
-            <h3>Messages</h3>
-            <p>iMessage and SMS functionality coming soon...</p>
+          <div className="whatsapp-module">
+            <div className="whatsapp-container">
+              <div className="whatsapp-chats-list">
+                <div className="whatsapp-header">
+                  <h3>Conversations</h3>
+                </div>
+                <div style={{ marginBottom: '1rem' }}>
+                  <input
+                    type="text"
+                    placeholder="Search conversations..."
+                    value={conversationSearchTerm}
+                    onChange={(e) => setConversationSearchTerm(e.target.value)}
+                    className="search-input"
+                    disabled={extracting}
+                  />
+                </div>
+                {!statusLoaded ? (
+                  <div className="loading">Loading...</div>
+                ) : isIndexingMessages ? (
+                  <div className="loading">
+                    <div>
+                      <div>Indexing messages...</div>
+                      {backupData.indexing_progress !== undefined && backupData.indexing_progress !== null && backupData.indexing_total ? (
+                        <>
+                          <div className="progress-bar">
+                            <div 
+                              className="progress-fill" 
+                              style={{ width: `${(backupData.indexing_progress / backupData.indexing_total) * 100}%` }}
+                            />
+                            <div className="progress-text">
+                              {Math.round((backupData.indexing_progress / backupData.indexing_total) * 100)}%
+                            </div>
+                          </div>
+                          <div className="progress-subtext">
+                            {backupData.indexing_progress}/{backupData.indexing_total}
+                          </div>
+                        </>
+                      ) : null}
+                      <div style={{ fontSize: '0.85rem', marginTop: '0.5rem', opacity: 0.7 }}>
+                        Please wait while messages are being indexed...
+                      </div>
+                    </div>
+                  </div>
+                ) : loading && !messageConversations.length ? (
+                  <div className="loading">Loading conversations...</div>
+                ) : messageConversations.length === 0 ? (
+                  <div className="no-results">
+                    <div>
+                      <div>No conversations found</div>
+                      <div style={{ fontSize: '0.85rem', marginTop: '0.5rem', opacity: 0.7 }}>
+                        Indexing completed but no iMessage/SMS data was found in this backup.
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="chats-list scrollable">
+                    {filteredConversations.map((conv) => (
+                      <button
+                        key={conv.conversation_guid}
+                        className={`chat-item ${selectedConversationGuid === conv.conversation_guid ? 'active' : ''}`}
+                        onClick={() => setSelectedConversationGuid(conv.conversation_guid)}
+                        disabled={extracting}
+                      >
+                        <div className="chat-title">
+                          {conv.display_name || conv.participant_handles?.join(', ') || conv.conversation_guid}
+                        </div>
+                        <div className="chat-subtitle">
+                          {conv.service === 'iMessage' ? '💬' : '📱'} {conv.service || 'SMS'}
+                        </div>
+                        {conv.last_message_at && (
+                          <div className="chat-date">
+                            {new Date(conv.last_message_at).toLocaleDateString()}
+                          </div>
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <div className="whatsapp-messages">
+                {selectedConversationGuid ? (
+                  <>
+                    <div className="whatsapp-header">
+                      <h3>
+                        {selectedConversation?.display_name || selectedConversation?.participant_handles?.join(', ') || 'Conversation'}
+                      </h3>
+                      <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                        <input
+                          type="text"
+                          placeholder="Search messages..."
+                          value={imessageSearchTerm}
+                          onChange={(e) => setImessageSearchTerm(e.target.value)}
+                          className="search-input search-box-wide"
+                          disabled={extracting}
+                        />
+                        {isConversationExtracted ? (
+                          <button
+                            className="download-btn extracted"
+                            disabled
+                            title="Files already extracted for this conversation"
+                          >
+                            ✓ Files Extracted
+                          </button>
+                        ) : (
+                          <button
+                            className={`download-btn ${extracting ? 'extracting' : ''}`}
+                            onClick={handleExtractMessageFiles}
+                            disabled={extracting || !sessionToken}
+                            title={!sessionToken ? 'Unlock backup first' : 'Extract files for this conversation'}
+                          >
+                            {extracting ? 'Extracting...' : 'Extract Files'}
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                    {!sessionToken && (
+                      <div className="error-message">
+                        <div style={{ marginBottom: '0.75rem' }}>
+                          Attachments require an unlocked session. Enter the backup password to unlock downloads.
+                        </div>
+                        <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                          <input
+                            type="password"
+                            placeholder="Backup password"
+                            value={unlockPassword}
+                            onChange={(e) => setUnlockPassword(e.target.value)}
+                            className="search-input"
+                            disabled={unlocking || extracting}
+                          />
+                          <button className="download-btn" onClick={handleUnlock} disabled={unlocking || extracting}>
+                            {unlocking ? 'Unlocking...' : 'Unlock Attachments'}
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                    {loading && <div className="loading">Loading messages...</div>}
+                    {error && <div className="error-message">{error}</div>}
+                    {!loading && !error && (
+                      <div
+                        ref={imessagesListRef}
+                        className="messages-list scrollable"
+                        onScroll={handleImessagesScroll}
+                      >
+                        {displayedImessages.map((message, index) => (
+                          <div
+                            key={message.message_guid || index}
+                            className={`message ${message.is_from_me ? 'from-me' : 'from-other'}`}
+                          >
+                            {!message.is_from_me && (
+                              <div className="message-sender">
+                                {formatMessageSender(message.sender, message.is_from_me, selectedConversation?.display_name)}
+                              </div>
+                            )}
+                            {message.text && <div className="message-body">{message.text}</div>}
+                            {message.attachments && message.attachments.length > 0 && (
+                              <div className="message-attachments">
+                                {message.attachments.map((attachment: MessageAttachment, attIndex: number) => (
+                                  <div
+                                    key={attachment.relative_path ?? attachment.file_id ?? String(attIndex)}
+                                    className="attachment-inline"
+                                  >
+                                    {renderMessageAttachment(attachment)}
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                            <div className="message-time">
+                              {message.sent_at && new Date(message.sent_at).toLocaleString()}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <div className="no-results">
+                    Select a conversation to view messages
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
         )}
 

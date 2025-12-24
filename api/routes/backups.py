@@ -17,7 +17,7 @@ from core.db.models import DecryptionStatus
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from core.db.artifacts import WhatsAppChat, WhatsAppMessage, WhatsAppAttachment
+from core.db.artifacts import WhatsAppChat, WhatsAppMessage, WhatsAppAttachment, MessageConversation, Message, MessageAttachment
 from core.db.models import Backup
 from sqlalchemy.orm import selectinload
 
@@ -705,4 +705,314 @@ async def extract_whatsapp_files(
             continue
     
     logger.info(f"Extraction complete: {extracted_files} extracted, {skipped_exists} already existed, {skipped_not_found} not found in manifest")
+    return {"extracted_files": extracted_files, "extracted_bytes": extracted_bytes}
+
+
+def _serialize_conversation(conv: MessageConversation) -> schemas.MessageConversationModel:
+    return schemas.MessageConversationModel(
+        conversation_guid=conv.conversation_guid,
+        service=conv.service,
+        display_name=conv.display_name,
+        last_message_at=conv.last_message_at,
+        participant_handles=conv.participant_handles or [],
+    )
+
+
+def _serialize_message_item(conversation_guid: str, message: Message, attachments: list[MessageAttachment]) -> schemas.MessageItemModel:
+    try:
+        metadata = dict(message.metadata) if message.metadata else {}
+    except (TypeError, ValueError):
+        metadata = {}
+    
+    attachment_models = []
+    for att in attachments:
+        if not att.relative_path and not att.file_id:
+            continue
+        try:
+            att_metadata = dict(att.metadata) if att.metadata else {}
+        except (TypeError, ValueError):
+            att_metadata = {}
+        attachment_models.append(schemas.MessageAttachmentModel(
+            file_id=att.file_id,
+            relative_path=att.relative_path,
+            mime_type=att.mime_type,
+            size_bytes=att.size_bytes,
+            metadata=att_metadata,
+        ))
+    
+    return schemas.MessageItemModel(
+        message_guid=message.message_guid,
+        conversation_guid=conversation_guid,
+        sender=message.sender,
+        is_from_me=message.is_from_me,
+        sent_at=message.sent_at,
+        text=message.text,
+        has_attachments=message.has_attachments,
+        attachments=attachment_models,
+        metadata=metadata,
+    )
+
+
+@router.get(
+    "/{backup_id}/artifacts/messages/conversations",
+    response_model=schemas.MessageConversationListResponse,
+)
+async def list_message_conversations(
+    backup_id: str,
+    registry: BackupRegistry = Depends(get_backup_registry),
+    session: AsyncSession = Depends(get_db_session),
+):
+    backup = await registry.get_backup(backup_id)
+    if not backup:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Backup not found.")
+    if backup.decryption_status != DecryptionStatus.DECRYPTED:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Backup not decrypted.")
+    
+    db_backup = await _get_backup_or_404(backup_id, session)
+    result = await session.scalars(
+        select(MessageConversation)
+        .where(MessageConversation.backup_id == db_backup.id)
+        .order_by(MessageConversation.last_message_at.desc().nullslast(), MessageConversation.display_name)
+    )
+    conversations = [_serialize_conversation(conv) for conv in result]
+    return schemas.MessageConversationListResponse(items=conversations)
+
+
+@router.get(
+    "/{backup_id}/artifacts/messages/conversations/{conversation_guid}",
+    response_model=schemas.MessageConversationDetailResponse,
+)
+async def get_message_conversation(
+    backup_id: str,
+    conversation_guid: str,
+    registry: BackupRegistry = Depends(get_backup_registry),
+    session: AsyncSession = Depends(get_db_session),
+):
+    backup = await registry.get_backup(backup_id)
+    if not backup:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Backup not found.")
+    if backup.decryption_status != DecryptionStatus.DECRYPTED:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Backup not decrypted.")
+    
+    db_backup = await _get_backup_or_404(backup_id, session)
+    conversation = await session.scalar(
+        select(MessageConversation).where(
+            MessageConversation.backup_id == db_backup.id,
+            MessageConversation.conversation_guid == conversation_guid
+        )
+    )
+    if not conversation:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Conversation not found.")
+    
+    messages_result = await session.scalars(
+        select(Message)
+        .options(selectinload(Message.attachments))
+        .where(Message.conversation_id == conversation.id)
+        .order_by(Message.sent_at.asc().nullsfirst(), Message.id)
+    )
+    
+    messages = []
+    for msg in messages_result:
+        attachments = msg.attachments if hasattr(msg, 'attachments') else []
+        messages.append(_serialize_message_item(conversation.conversation_guid, msg, attachments))
+    
+    return schemas.MessageConversationDetailResponse(
+        conversation=_serialize_conversation(conversation),
+        messages=messages
+    )
+
+
+@router.get("/{backup_id}/artifacts/messages/attachment")
+async def download_message_attachment(
+    backup_id: str,
+    relative_path: str,
+    registry: BackupRegistry = Depends(get_backup_registry),
+    unlock_mgr: UnlockManager = Depends(get_unlock_manager),
+    session_token: str | None = Header(None, alias="X-Backup-Session"),
+):
+    """Download an iMessage/SMS attachment by its relative path."""
+    backup = await registry.get_backup(backup_id)
+    if not backup:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Backup not found.")
+    if backup.decryption_status != DecryptionStatus.DECRYPTED:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Backup not decrypted.")
+    
+    if session_token:
+        fs = _ensure_session(backup_id, session_token, unlock_mgr)
+    else:
+        fs = _get_filesystem_from_decrypted(backup)
+
+    requested_path = (relative_path or "").lstrip("/")
+    if not requested_path:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="relative_path is required")
+
+    # Handle ~/Library paths by stripping the ~ prefix
+    if requested_path.startswith("~"):
+        requested_path = requested_path[1:].lstrip("/")
+
+    resolved_domain: str | None = None
+    resolved_relative_path: str | None = None
+
+    def _pick_candidate(entries, wanted: str) -> tuple[str, str] | None:
+        for entry in entries:
+            if entry.relative_path == wanted:
+                return entry.domain, entry.relative_path
+        for entry in entries:
+            if entry.relative_path.endswith("/" + wanted) or entry.relative_path.endswith(wanted):
+                return entry.domain, entry.relative_path
+        return None
+
+    try:
+        candidates = fs.search_paths(requested_path, limit=50)
+        picked = _pick_candidate(candidates, requested_path)
+        if picked:
+            resolved_domain, resolved_relative_path = picked
+    except Exception as e:
+        logger.warning(f"Manifest search failed for message attachment {requested_path}: {e}")
+
+    if not resolved_domain or not resolved_relative_path:
+        filename_only = Path(requested_path).name
+        if filename_only:
+            try:
+                candidates = fs.search_paths(filename_only, limit=50)
+                picked = _pick_candidate(candidates, filename_only)
+                if picked:
+                    resolved_domain, resolved_relative_path = picked
+            except Exception as e:
+                logger.warning(f"Filename manifest search failed for message attachment {filename_only}: {e}")
+
+    if not resolved_domain or not resolved_relative_path:
+        # Try common iMessage-related domains
+        domain_candidates = [
+            "MediaDomain",
+            "HomeDomain",
+        ]
+        for domain in domain_candidates:
+            try:
+                payload_path, sandbox_dir = fs.extract_to_temp(domain=domain, relative_path=requested_path)
+                resolved_domain, resolved_relative_path = domain, requested_path
+                break
+            except Exception:
+                continue
+        else:
+            logger.error(f"Failed to resolve message attachment in manifest: {requested_path}")
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Attachment file not found.")
+
+    try:
+        payload_path, sandbox_dir = fs.extract_to_temp(domain=resolved_domain, relative_path=resolved_relative_path)
+    except Exception as e:
+        logger.error(
+            f"Failed to extract message attachment domain={resolved_domain} relative_path={resolved_relative_path}: {e}"
+        )
+        if not session_token:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Attachment not present in decrypted data. Unlock the backup and retry.",
+            )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Attachment file not found.")
+    
+    filename = Path(resolved_relative_path).name or "attachment"
+    background = BackgroundTask(shutil.rmtree, sandbox_dir, True)
+    
+    import mimetypes
+    mime_type, _ = mimetypes.guess_type(filename)
+    
+    return FileResponse(
+        path=str(payload_path),
+        media_type=mime_type or "application/octet-stream",
+        filename=filename,
+        background=background,
+    )
+
+
+@router.post("/{backup_id}/extract/messages/{conversation_guid}")
+async def extract_message_files(
+    backup_id: str,
+    conversation_guid: str,
+    db: AsyncSession = Depends(get_db_session),
+    registry: BackupRegistry = Depends(get_backup_registry),
+    unlock_mgr: UnlockManager = Depends(get_unlock_manager),
+    session_token: str | None = Header(None, alias="X-Backup-Session"),
+):
+    """Extract iMessage/SMS files for a specific conversation to decrypted backup directory."""
+    backup = await registry.get_backup(backup_id)
+    if not backup:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Backup not found.")
+    if backup.decryption_status != DecryptionStatus.DECRYPTED:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Backup not decrypted.")
+    
+    db_backup = await _get_backup_or_404(backup_id, db)
+    
+    logger.info(f"Extracting message files for conversation_guid={conversation_guid}, backup.id={db_backup.id}")
+    stmt = (
+        select(MessageAttachment.relative_path, MessageAttachment.file_id)
+        .join(Message, Message.id == MessageAttachment.message_id)
+        .join(MessageConversation, MessageConversation.id == Message.conversation_id)
+        .where(MessageConversation.backup_id == db_backup.id)
+        .where(MessageConversation.conversation_guid == conversation_guid)
+    )
+    result = await db.execute(stmt)
+    attachment_rows = result.fetchall()
+    logger.info(f"Found {len(attachment_rows)} attachments for conversation_guid={conversation_guid}")
+    
+    if not attachment_rows:
+        return {"extracted_files": 0, "extracted_bytes": 0}
+    
+    if session_token:
+        fs = _ensure_session(backup_id, session_token, unlock_mgr)
+    else:
+        fs = _get_filesystem_from_decrypted(backup)
+    decrypted_path = Path(backup.decrypted_path)
+    
+    file_ids = [file_id for _, file_id in attachment_rows if file_id]
+    manifest_entries = fs.get_entries_by_file_ids(file_ids)
+    
+    extracted_files = 0
+    extracted_bytes = 0
+    skipped_exists = 0
+    skipped_not_found = 0
+    
+    for idx, (relative_path, file_id) in enumerate(attachment_rows):
+        if idx > 0 and idx % 500 == 0:
+            logger.info(f"Extraction progress: {idx}/{len(attachment_rows)} processed")
+        
+        manifest_entry = None
+        if file_id:
+            manifest_entry = manifest_entries.get(file_id)
+        if not manifest_entry and relative_path:
+            # Handle ~/Library paths
+            search_path = relative_path
+            if search_path.startswith("~"):
+                search_path = search_path[1:].lstrip("/")
+            try:
+                manifest_candidates = fs.search_paths(search_path, limit=5)
+            except Exception as exc:
+                logger.warning(f"Manifest search failed for attachment path {relative_path}: {exc}")
+                manifest_candidates = []
+            if manifest_candidates:
+                manifest_entry = manifest_candidates[0]
+
+        if not manifest_entry:
+            skipped_not_found += 1
+            continue
+
+        mf = manifest_entry
+        target_path = decrypted_path / mf.domain / mf.relative_path
+        if target_path.exists():
+            skipped_exists += 1
+            continue
+        
+        target_path.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            payload_path, sandbox_dir = fs.extract_to_temp(domain=mf.domain, relative_path=mf.relative_path)
+            shutil.copy2(payload_path, target_path)
+            shutil.rmtree(sandbox_dir, ignore_errors=True)
+            extracted_files += 1
+            if mf.size:
+                extracted_bytes += int(mf.size)
+        except Exception as e:
+            logger.warning(f"Failed to extract {mf.domain}/{mf.relative_path}: {e}")
+            continue
+    
+    logger.info(f"Extraction complete: {extracted_files} extracted, {skipped_exists} already existed, {skipped_not_found} not found")
     return {"extracted_files": extracted_files, "extracted_bytes": extracted_bytes}

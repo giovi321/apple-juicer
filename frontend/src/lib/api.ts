@@ -15,6 +15,7 @@ export type {
   BackupStatus,
   CalendarEvent,
   ContactRecord,
+  MessageAttachment,
   MessageConversation,
   MessageItem,
   NoteRecord,
@@ -296,6 +297,38 @@ export const api = {
     console.log('API: extractWhatsAppFiles called with chatGuid:', chatGuid);
     const url = `/backups/${backupId}/extract/whatsapp/${encodeURIComponent(chatGuid)}`;
     console.log('API: Full URL path:', url);
+    return request<{ extracted_files: number; extracted_bytes: number }>(
+      url,
+      'POST',
+      { token, sessionToken }
+    );
+  },
+  downloadMessageAttachment: async (backupId: string, relativePath: string, token: string, sessionToken?: string) => {
+    const urlString = apiUrl(`/backups/${backupId}/artifacts/messages/attachment`, {
+      relative_path: relativePath,
+    });
+    const response = await fetch(urlString, {
+      method: 'GET',
+      headers: {
+        'X-API-Token': token,
+        ...(sessionToken ? { 'X-Backup-Session': sessionToken } : {}),
+      },
+    });
+    const contentType = response.headers.get('content-type') || '';
+    if (response.ok && contentType.includes('text/html')) {
+      const errorText = await response.text();
+      throw new Error(
+        `Attachment download returned HTML instead of media (content-type: ${contentType}). URL=${urlString}. BodyStart=${errorText.slice(0, 200)}`,
+      );
+    }
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(errorText || `Download failed (${response.status})`);
+    }
+    return response;
+  },
+  extractMessageFiles: (backupId: string, conversationGuid: string, token: string, sessionToken: string) => {
+    const url = `/backups/${backupId}/extract/messages/${encodeURIComponent(conversationGuid)}`;
     return request<{ extracted_files: number; extracted_bytes: number }>(
       url,
       'POST',

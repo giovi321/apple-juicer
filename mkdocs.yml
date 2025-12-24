@@ -39,6 +39,7 @@ nav:
       - Configuration: operations/configuration.md
       - Tasks & Workflows: operations/tasks.md
       - Troubleshooting: operations/troubleshooting.md
+      - Security Assessment: operations/security.md
   - Reference:
       - API Surface: reference/api.md
       - Directory Layout: reference/directory-layout.md

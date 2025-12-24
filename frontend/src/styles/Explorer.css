@@ -19,7 +19,7 @@
   background: rgba(255, 139, 60, 0.15);
   border: 1px solid rgba(255, 139, 60, 0.2);
   padding: 0.75rem 1.5rem;
-  border-radius: 10px;
+  border-radius: 4px;
   font-size: 1rem;
   cursor: pointer;
   transition: all 0.2s;
@@ -123,7 +123,7 @@
   background: rgba(15, 16, 18, 0.85);
   border: 1px solid rgba(255, 139, 60, 0.1);
   padding: 1rem;
-  border-radius: 10px;
+  border-radius: 4px;
   cursor: pointer;
   transition: all 0.2s;
   text-align: left;
@@ -158,7 +158,7 @@
   flex: 1;
   background: rgba(15, 16, 18, 0.85);
   border: 1px solid rgba(255, 139, 60, 0.1);
-  border-radius: 18px;
+  border-radius: 4px;
   padding: 2rem;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
 }
@@ -194,7 +194,7 @@
   padding: 0.75rem;
   background: rgba(18, 19, 21, 0.8);
   border: 1px solid rgba(255, 139, 60, 0.2);
-  border-radius: 10px;
+  border-radius: 4px;
   font-size: 0.95rem;
   color: #f5f6fa;
   transition: all 0.2s;
@@ -219,7 +219,7 @@
   padding: 1rem;
   background: rgba(220, 53, 69, 0.15);
   color: #ff6b6b;
-  border-radius: 10px;
+  border-radius: 4px;
   border-left: 4px solid #ff6b6b;
 }
 
@@ -288,7 +288,7 @@
   color: #0f1114;
   border: none;
   padding: 0.5rem 1rem;
-  border-radius: 8px;
+  border-radius: 4px;
   font-size: 0.85rem;
   cursor: pointer;
   transition: all 0.2s;
@@ -306,9 +306,9 @@
 }
 
 .download-btn.extracting {
-  background: #4a9eff;
-  color: #fff;
-  animation: pulse 1.5s infinite;
+  background: rgba(100, 150, 255, 0.2);
+  color: #64b5ff;
+  animation: pulsate 1.5s ease-in-out infinite;
 }
 
 .download-btn.extracted {
@@ -317,12 +317,14 @@
   cursor: default;
 }
 
-@keyframes pulse {
+@keyframes pulsate {
   0%, 100% {
     opacity: 1;
+    transform: scale(1);
   }
   50% {
-    opacity: 0.7;
+    opacity: 0.6;
+    transform: scale(0.95);
   }
 }
 
@@ -348,7 +350,7 @@
   z-index: 9999;
   backdrop-filter: blur(8px);
   cursor: wait;
-  border-radius: 18px;
+  border-radius: 4px;
 }
 
 .extraction-overlay-content {
@@ -412,7 +414,7 @@
   padding: 0.5rem;
   background: rgba(18, 19, 21, 0.8);
   border: 1px solid rgba(255, 139, 60, 0.2);
-  border-radius: 8px;
+  border-radius: 4px;
   font-size: 0.85rem;
   color: #f5f6fa;
   transition: all 0.2s;
@@ -463,7 +465,7 @@
   background: rgba(15, 16, 18, 0.85);
   border: 1px solid rgba(255, 139, 60, 0.1);
   padding: 0.75rem;
-  border-radius: 8px;
+  border-radius: 4px;
   cursor: pointer;
   transition: all 0.2s;
   text-align: left;
@@ -540,7 +542,7 @@
 
 .message {
   padding: 0.75rem;
-  border-radius: 8px;
+  border-radius: 4px;
   background: rgba(15, 16, 18, 0.85);
   border: 1px solid rgba(255, 139, 60, 0.1);
 }
@@ -582,7 +584,7 @@
   height: 24px;
   background: rgba(18, 19, 21, 0.8);
   border: 1px solid rgba(255, 139, 60, 0.2);
-  border-radius: 12px;
+  border-radius: 4px;
   overflow: hidden;
   margin-top: 0.75rem;
 }
@@ -591,7 +593,7 @@
   height: 100%;
   background: linear-gradient(90deg, #ff8b3c, #ffb347);
   transition: width 0.3s ease;
-  border-radius: 12px;
+  border-radius: 4px;
 }
 
 .progress-text {
@@ -631,7 +633,7 @@
   font-size: 0.85rem;
   background: rgba(18, 19, 21, 0.5);
   border: 1px solid rgba(255, 139, 60, 0.15);
-  border-radius: 8px;
+  border-radius: 4px;
 }
 
 .attachment-error {
@@ -644,7 +646,7 @@
   position: relative;
   display: inline-block;
   max-width: 100%;
-  border-radius: 8px;
+  border-radius: 4px;
   overflow: hidden;
   cursor: pointer;
 }
@@ -653,7 +655,7 @@
   max-width: 100%;
   max-height: 300px;
   display: block;
-  border-radius: 8px;
+  border-radius: 4px;
   transition: opacity 0.2s;
 }
 
@@ -694,7 +696,7 @@
 .attachment-video-wrapper {
   position: relative;
   max-width: 100%;
-  border-radius: 8px;
+  border-radius: 4px;
   overflow: hidden;
 }
 
@@ -702,7 +704,7 @@
   max-width: 100%;
   max-height: 300px;
   display: block;
-  border-radius: 8px;
+  border-radius: 4px;
 }
 
 .attachment-video-wrapper .attachment-download-overlay {
@@ -721,7 +723,7 @@
   padding: 0.5rem;
   background: rgba(18, 19, 21, 0.5);
   border: 1px solid rgba(255, 139, 60, 0.15);
-  border-radius: 8px;
+  border-radius: 4px;
 }
 
 .audio-mini-btn {
@@ -729,7 +731,7 @@
   border: 1px solid rgba(255, 139, 60, 0.3);
   color: #f5f6fa;
   padding: 0.35rem 0.6rem;
-  border-radius: 8px;
+  border-radius: 4px;
   cursor: pointer;
   font-size: 0.85rem;
   font-weight: 600;
@@ -760,7 +762,7 @@
   padding: 0.75rem;
   background: rgba(18, 19, 21, 0.5);
   border: 1px dashed rgba(255, 139, 60, 0.25);
-  border-radius: 8px;
+  border-radius: 4px;
   font-size: 0.85rem;
   opacity: 0.7;
 }
@@ -780,7 +782,7 @@
   padding: 0.75rem;
   background: rgba(18, 19, 21, 0.5);
   border: 1px solid rgba(255, 139, 60, 0.15);
-  border-radius: 8px;
+  border-radius: 4px;
   font-size: 0.85rem;
 }
 
@@ -804,7 +806,7 @@
   background: rgba(255, 139, 60, 0.2);
   border: 1px solid rgba(255, 139, 60, 0.3);
   padding: 0.4rem 0.6rem;
-  border-radius: 6px;
+  border-radius: 4px;
   cursor: pointer;
   font-size: 1rem;
   transition: all 0.2s;

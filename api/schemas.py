@@ -106,3 +106,40 @@ class WhatsAppChatListResponse(BaseModel):
 class WhatsAppChatDetailResponse(BaseModel):
     chat: WhatsAppChatModel
     messages: list[WhatsAppMessageModel]
+
+
+class MessageConversationModel(BaseModel):
+    conversation_guid: str
+    service: Optional[str] = None
+    display_name: Optional[str] = None
+    last_message_at: Optional[datetime] = None
+    participant_handles: Optional[list[str]] = None
+
+
+class MessageAttachmentModel(BaseModel):
+    file_id: Optional[str] = None
+    relative_path: Optional[str] = None
+    mime_type: Optional[str] = None
+    size_bytes: Optional[int] = None
+    metadata: Optional[dict[str, Any]] = None
+
+
+class MessageItemModel(BaseModel):
+    message_guid: str
+    conversation_guid: str
+    sender: Optional[str] = None
+    is_from_me: bool
+    sent_at: Optional[datetime] = None
+    text: Optional[str] = None
+    has_attachments: bool
+    attachments: list[MessageAttachmentModel] = []
+    metadata: Optional[dict[str, Any]] = None
+
+
+class MessageConversationListResponse(BaseModel):
+    items: list[MessageConversationModel]
+
+
+class MessageConversationDetailResponse(BaseModel):
+    conversation: MessageConversationModel
+    messages: list[MessageItemModel]

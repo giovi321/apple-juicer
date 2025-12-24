@@ -16,7 +16,7 @@
   color: #ff8b3c;
   border: 1px solid rgba(255, 139, 60, 0.3);
   padding: 0.75rem 1.5rem;
-  border-radius: 10px;
+  border-radius: 6px;
   font-size: 1rem;
   cursor: pointer;
   transition: all 0.3s ease;
@@ -37,7 +37,7 @@
   max-width: 1200px;
   margin: 0 auto 1.5rem;
   padding: 1rem;
-  border-radius: 12px;
+  border-radius: 6px;
   border-left: 4px solid #64b5ff;
   background: rgba(100, 150, 255, 0.12);
   color: #64b5ff;
@@ -57,7 +57,7 @@
   padding: 1rem;
   background: rgba(220, 53, 69, 0.15);
   color: #ff6b6b;
-  border-radius: 10px;
+  border-radius: 6px;
   border-left: 4px solid #ff6b6b;
 }
 
@@ -69,7 +69,7 @@
   text-align: center;
   background: rgba(15, 16, 18, 0.85);
   border: 1px solid rgba(255, 139, 60, 0.1);
-  border-radius: 18px;
+  border-radius: 8px;
   color: rgba(245, 246, 250, 0.65);
   font-size: 1.1rem;
 }
@@ -85,7 +85,7 @@
 .backup-card {
   background: rgba(15, 16, 18, 0.85);
   border: 1px solid rgba(255, 139, 60, 0.1);
-  border-radius: 18px;
+  border-radius: 8px;
   padding: 1.5rem;
   cursor: pointer;
   transition: all 0.3s ease;
@@ -132,7 +132,7 @@
 
 .status-badge {
   padding: 0.4rem 0.8rem;
-  border-radius: 20px;
+  border-radius: 12px;
   font-size: 0.85rem;
   font-weight: 600;
   white-space: nowrap;
@@ -179,8 +179,8 @@
 }
 
 .status-deleting {
-  background: rgba(244, 67, 54, 0.2);
-  color: #ef5350;
+  background: rgba(100, 150, 255, 0.2);
+  color: #64b5ff;
 }
 
 .backup-card-details {
@@ -287,7 +287,7 @@
 .modal-content {
   background: rgba(15, 16, 18, 0.95);
   border: 1px solid rgba(255, 139, 60, 0.2);
-  border-radius: 18px;
+  border-radius: 8px;
   padding: 2rem;
   max-width: 500px;
   width: 90%;
@@ -322,7 +322,7 @@
   color: #ff8b3c;
   border: 1px solid rgba(255, 139, 60, 0.3);
   padding: 0.75rem 1.5rem;
-  border-radius: 10px;
+  border-radius: 6px;
   font-size: 1rem;
   cursor: pointer;
   transition: all 0.2s;
@@ -339,7 +339,7 @@
   color: #ff6b6b;
   border: 1px solid rgba(220, 53, 69, 0.4);
   padding: 0.75rem 1.5rem;
-  border-radius: 10px;
+  border-radius: 6px;
   font-size: 1rem;
   cursor: pointer;
   transition: all 0.2s;

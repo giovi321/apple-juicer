@@ -1,10 +1,10 @@
 # Tasks & Workflows
 
-This page outlines the recurring operational workflows for iOS Backup Explorer.
+This page outlines the recurring operational workflows for Apple Juicer.
 
 ## Discovering Backups
 
-1. Ensure backups exist under `IOS_BACKUP_BACKUP_PATHS__BASE_PATH`.
+1. Ensure backups exist under `APPLE_JUICER_BACKUP_PATHS__BASE_PATH`.
 2. Call `POST /backups/refresh` (or click “Refresh” in the UI) to scan the filesystem.
 3. Newly discovered backups are inserted or existing rows updated in Postgres, including size bytes, device name, and encryption flags. (@api/routes/backups.py#34-51)
 

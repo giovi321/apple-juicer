@@ -10,7 +10,7 @@ The backend is a FastAPI application defined in `api/main.py`. It exposes a smal
 
 ## Dependencies & Settings
 
-`core.config.get_settings()` caches `AppSettings`, which aggregate security, Postgres, Redis, and filesystem configuration. Env vars use the `IOS_BACKUP_` prefix with nested delimiters. (@core/config/settings.py#50-68)
+`core.config.get_settings()` caches `AppSettings`, which aggregate security, Postgres, Redis, and filesystem configuration. Env vars use the `APPLE_JUICER_` prefix with nested delimiters. (@core/config/settings.py#50-68)
 
 FastAPI dependencies inject long-lived services:
 

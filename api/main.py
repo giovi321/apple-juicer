@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 def create_app() -> FastAPI:
     settings = get_settings()
     app = FastAPI(
-        title="iOS Backup Explorer",
+        title="apple-juicer",
         version="0.1.0",
         docs_url="/docs" if settings.environment != "production" else None,
         redoc_url=None,
@@ -36,7 +36,7 @@ def create_app() -> FastAPI:
 
     @app.get("/", include_in_schema=False)
     async def root():
-        return {"name": "iOS Backup Explorer", "status": "ok"}
+        return {"name": "apple-juicer", "status": "ok"}
 
     @app.get("/favicon.ico", include_in_schema=False)
     async def favicon():

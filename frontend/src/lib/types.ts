@@ -108,6 +108,14 @@ export interface MessageConversation {
   participant_handles?: string[];
 }
 
+export interface MessageAttachment {
+  file_id?: string | null;
+  relative_path?: string | null;
+  mime_type?: string | null;
+  size_bytes?: number | null;
+  metadata?: Record<string, unknown> | null;
+}
+
 export interface MessageItem {
   message_guid: string;
   conversation_guid: string;
@@ -115,6 +123,9 @@ export interface MessageItem {
   is_from_me: boolean;
   sent_at: string | null;
   text: string | null;
+  has_attachments: boolean;
+  attachments: MessageAttachment[];
+  metadata?: Record<string, unknown> | null;
 }
 
 export type ArtifactView =

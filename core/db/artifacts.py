@@ -130,6 +130,10 @@ class Message(Base, MetadataJSONMixin):
     has_attachments: Mapped[bool] = mapped_column(Boolean, default=False)
     metadata_blob: Mapped[dict | None] = mapped_column("metadata", JSON)
 
+    attachments: Mapped[list["MessageAttachment"]] = relationship(
+        "MessageAttachment", back_populates="message", cascade="all, delete-orphan"
+    )
+
 
 class MessageAttachment(Base, MetadataJSONMixin):
     __tablename__ = "message_attachments"
@@ -141,6 +145,8 @@ class MessageAttachment(Base, MetadataJSONMixin):
     mime_type: Mapped[str | None] = mapped_column(String(255))
     size_bytes: Mapped[int | None]
     metadata_blob: Mapped[dict | None] = mapped_column("metadata", JSON)
+
+    message: Mapped["Message"] = relationship(back_populates="attachments")
 
 
 class Note(Base, MetadataJSONMixin):

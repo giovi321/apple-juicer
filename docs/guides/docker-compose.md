@@ -18,12 +18,12 @@ The repository ships with a production-like stack powered by Docker Compose. It 
 
 ## Environment Variables
 
-You can override any Pydantic setting by exporting `IOS_BACKUP_*` variables before running Compose. Common overrides:
+You can override any Pydantic setting by exporting `APPLE_JUICER_*` variables before running Compose. Common overrides:
 
 ```bash
-export IOS_BACKUP_SECURITY__API_TOKEN="your-prod-token"
-export IOS_BACKUP_BACKUP_PATHS__BASE_PATH="/data/ios_backups"
-export IOS_BACKUP_REDIS__URL="redis://redis:6379/0"
+export APPLE_JUICER_SECURITY__API_TOKEN="your-prod-token"
+export APPLE_JUICER_BACKUP_PATHS__BASE_PATH="/data/ios_backups"
+export APPLE_JUICER_REDIS__URL="redis://redis:6379/0"
 ```
 
 For secrets, prefer a `.env` file placed next to `docker-compose.yml`.
