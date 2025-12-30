@@ -1,4 +1,5 @@
 # Apple Juicer
+<img width="100" height="100" alt="logo" src="https://github.com/user-attachments/assets/c8d04b50-4119-470b-8ed0-6611357b1a8b" />
 
 A full-stack web application for extracting and analyzing data from iOS (Finder/iTunes) backups. Built with FastAPI, React, PostgreSQL, and Redis.
 
