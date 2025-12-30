@@ -28,3 +28,5 @@ frontend/build/
 tmp/
 data/
 *.sqlite
+temp_data/
+*.db
