@@ -100,6 +100,17 @@ export interface ContactRecord {
   avatar_file_id: string | null;
 }
 
+export interface CallRecord {
+  call_identifier: string;
+  address: string | null;
+  display_name: string | null;
+  occurred_at?: string | null;
+  duration_seconds?: number | null;
+  is_outgoing: boolean;
+  answered: boolean;
+  service?: string | null;
+}
+
 export interface MessageConversation {
   conversation_guid: string;
   service: string | null;
@@ -136,4 +147,5 @@ export type ArtifactView =
   | 'notes'
   | 'calendar'
   | 'contacts'
+  | 'calls'
   | 'search';

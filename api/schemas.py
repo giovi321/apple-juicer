@@ -205,6 +205,21 @@ class ContactListResponse(BaseModel):
     items: list[ContactModel]
 
 
+class CallModel(BaseModel):
+    call_identifier: str
+    address: Optional[str] = None
+    display_name: Optional[str] = None
+    occurred_at: Optional[datetime] = None
+    duration_seconds: Optional[int] = None
+    is_outgoing: bool = False
+    answered: bool = False
+    service: Optional[str] = None
+
+
+class CallListResponse(BaseModel):
+    items: list[CallModel]
+
+
 class SearchResultModel(BaseModel):
     artifact_type: str
     artifact_ref: str

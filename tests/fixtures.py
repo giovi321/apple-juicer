@@ -123,6 +123,24 @@ def make_whatsapp_db(path: Path) -> None:
     conn.close()
 
 
+def make_calls_db(path: Path) -> None:
+    conn = sqlite3.connect(path)
+    conn.executescript(
+        """
+        CREATE TABLE ZCALLRECORD (
+            Z_PK INTEGER PRIMARY KEY, ZUNIQUE_ID TEXT, ZADDRESS TEXT, ZNAME TEXT,
+            ZDATE REAL, ZDURATION REAL, ZORIGINATED INTEGER, ZANSWERED INTEGER, ZSERVICE_PROVIDER TEXT
+        );
+        INSERT INTO ZCALLRECORD VALUES
+            (1, 'call-1', '+15550001111', 'Ada', 700000000.0, 65.0, 1, 1, 'com.apple.Telephony');
+        INSERT INTO ZCALLRECORD VALUES
+            (2, 'call-2', '+15550002222', NULL, 700100000.0, 0.0, 0, 0, 'com.apple.Telephony');
+        """
+    )
+    conn.commit()
+    conn.close()
+
+
 def make_messages_db(path: Path) -> None:
     conn = sqlite3.connect(path)
     conn.executescript(
@@ -170,6 +188,7 @@ def build_all(decrypted_dir: Path) -> dict[str, str]:
         "notes": decrypted_dir / "notes.sqlite",
         "calendar": decrypted_dir / "Calendar.sqlite",
         "contacts": decrypted_dir / "AddressBook.sqlitedb",
+        "calls": decrypted_dir / "CallHistory.storedata",
     }
     make_photos_db(files["photos"])
     make_whatsapp_db(files["whatsapp"])
@@ -177,4 +196,5 @@ def build_all(decrypted_dir: Path) -> dict[str, str]:
     make_notes_db(files["notes"])
     make_calendar_db(files["calendar"])
     make_contacts_db(files["contacts"])
+    make_calls_db(files["calls"])
     return {key: str(value) for key, value in files.items()}

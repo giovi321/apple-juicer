@@ -28,6 +28,7 @@ async def test_artifact_endpoints_return_indexed_rows(db, tmp_path):
 
     from api.routes import (
         artifacts_calendar,
+        artifacts_calls,
         artifacts_contacts,
         artifacts_notes,
         artifacts_photos,
@@ -58,6 +59,7 @@ async def test_artifact_endpoints_return_indexed_rows(db, tmp_path):
         notes = await artifacts_notes.list_notes(backup_id, registry=registry, session=session)
         events = await artifacts_calendar.list_calendar_events(backup_id, registry=registry, session=session)
         contacts = await artifacts_contacts.list_contacts(backup_id, registry=registry, session=session)
+        calls = await artifacts_calls.list_calls(backup_id, registry=registry, session=session)
 
     assert {p.media_type for p in photos.items} == {"photo", "video"}
     assert len(notes.items) == 2
@@ -67,6 +69,9 @@ async def test_artifact_endpoints_return_indexed_rows(db, tmp_path):
     assert contacts.items[0].first_name == "Ada"
     assert contacts.items[0].emails == ["ada@example.com"]
     assert contacts.items[0].phones == ["+15550001111"]
+    assert len(calls.items) == 2
+    assert {c.is_outgoing for c in calls.items} == {True, False}
+    assert any(c.display_name == "Ada" for c in calls.items)
 
 
 async def test_endpoints_reject_undecrypted_backup(db, tmp_path):

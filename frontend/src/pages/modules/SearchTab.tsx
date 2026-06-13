@@ -9,6 +9,7 @@ const TYPE_META: Record<string, { label: string; icon: string }> = {
   note: { label: 'Note', icon: '📝' },
   calendar_event: { label: 'Event', icon: '🗓' },
   contact: { label: 'Contact', icon: '👤' },
+  call: { label: 'Call', icon: '📞' },
 };
 
 export function SearchTab({ apiToken, backupId }: { apiToken: string; backupId: string }) {

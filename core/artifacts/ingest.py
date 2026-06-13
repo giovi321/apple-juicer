@@ -19,6 +19,7 @@ from core.db.artifacts import (
     ArtifactSearchIndex,
     Calendar,
     CalendarEvent,
+    CallRecord,
     Contact,
     Message,
     MessageAttachment,
@@ -31,6 +32,7 @@ from core.db.artifacts import (
 )
 from core.db.models import Backup
 from parsers import calendar as calendar_parser
+from parsers import callhistory as callhistory_parser
 from parsers import contacts as contacts_parser
 from parsers import messages as messages_parser
 from parsers import notes as notes_parser
@@ -67,6 +69,7 @@ async def truncate_artifacts(session: AsyncSession, backup: Backup) -> None:
         CalendarEvent,
         Calendar,
         Contact,
+        CallRecord,
         ArtifactSearchIndex,
     ]
     for table in tables_with_backup_id:
@@ -472,6 +475,46 @@ async def ingest_contacts(session: AsyncSession, backup: Backup, db_path: Path |
                 ),
             )
             for contact in contacts
+        ],
+    )
+    backup.indexing_progress = (backup.indexing_progress or 0) + 1
+    await session.flush()
+
+
+async def ingest_calls(session: AsyncSession, backup: Backup, db_path: Path | None) -> None:
+    if not db_path or not str(db_path).strip() or not db_path.exists():
+        return
+    backup.indexing_artifact = "calls"
+    await session.flush()
+    calls = callhistory_parser.parse_call_history(db_path)
+    call_rows = [
+        CallRecord(
+            backup_id=backup.id,
+            call_identifier=call.identifier,
+            address=call.address,
+            display_name=call.name,
+            occurred_at=call.occurred_at,
+            duration_seconds=call.duration_seconds,
+            is_outgoing=call.is_outgoing,
+            answered=call.answered,
+            service=call.service,
+        )
+        for call in calls
+    ]
+    session.add_all(call_rows)
+    await _add_search_rows(
+        session,
+        backup,
+        "call",
+        [
+            ArtifactSearchIndex(
+                backup_id=backup.id,
+                artifact_type="call",
+                artifact_ref=call.identifier,
+                display_text=call.name or call.address,
+                search_text=" ".join(filter(None, [call.name, call.address])),
+            )
+            for call in calls
         ],
     )
     backup.indexing_progress = (backup.indexing_progress or 0) + 1
