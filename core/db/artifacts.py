@@ -168,11 +168,7 @@ class Calendar(Base, MetadataJSONMixin):
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     backup_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("backups.id", ondelete="CASCADE"), index=True)
     calendar_identifier: Mapped[str] = mapped_column(String(255))
-    title: Mapped[str | None] = mapped_column(String(255))
-    body: Mapped[str | None] = mapped_column(Text)
-    folder: Mapped[str | None] = mapped_column(String(255))
-    last_modified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-    last_message_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    name: Mapped[str | None] = mapped_column(String(255))
     color: Mapped[str | None] = mapped_column(String(32))
     source: Mapped[str | None] = mapped_column(String(128))
 

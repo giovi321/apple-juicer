@@ -72,8 +72,6 @@ def parse_contacts(db_path: Path) -> List[ContactRecord]:
 def _load_multi_values(conn) -> dict[tuple[int, str], list[str]]:
     if not (table_exists(conn, "ABMultiValue") and table_exists(conn, "ABMultiValueLabel")):
         return {}
-    label_rows = conn.execute("SELECT ROWID, value FROM ABMultiValueLabel").fetchall()
-    label_lookup = {row["ROWID"]: row["value"] for row in label_rows}
 
     rows = conn.execute(
         """
@@ -93,7 +91,6 @@ def _load_multi_values(conn) -> dict[tuple[int, str], list[str]]:
         property_name = property_names.get(row["property"])
         if not property_name:
             continue
-        label_name = label_lookup.get(row["label"]) or property_name
         key = (row["record_id"], property_name)
         values.setdefault(key, []).append(row["value"])
 

@@ -1,12 +1,11 @@
 from __future__ import annotations
 
-import os
 import shutil
 import sqlite3
 import tempfile
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Iterator, List, Sequence
+from typing import List, Sequence
 
 from iphone_backup_decrypt import utils as ib_utils
 from iphone_backup_decrypt.iphone_backup import EncryptedBackup

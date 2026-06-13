@@ -5,10 +5,8 @@ This simulates the API responses without requiring a full database setup.
 """
 
 import json
-import time
 from http.server import HTTPServer, BaseHTTPRequestHandler
-from urllib.parse import urlparse, parse_qs
-import threading
+from urllib.parse import urlparse
 
 class MockBackendHandler(BaseHTTPRequestHandler):
     def do_OPTIONS(self):

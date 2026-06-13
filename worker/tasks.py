@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import asyncio
 from datetime import datetime, timezone
-import json
 import logging
 from pathlib import Path
 from typing import Iterable
@@ -11,7 +10,6 @@ from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.backupfs.types import BackupStatus
-from core.config import get_settings
 from core.db.artifacts import (
     ArtifactSearchIndex,
     Calendar,
@@ -43,7 +41,6 @@ async def _index_backup_job(
     artifact_bundle_dir: str,
     artifact_files: dict[str, str],
 ) -> None:
-    settings = get_settings()
     job_dir = Path(artifact_bundle_dir)
     if not job_dir.exists():
         raise FileNotFoundError(f"Artifact bundle missing: {artifact_bundle_dir}")
