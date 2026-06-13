@@ -163,6 +163,18 @@ export interface DiscoverResponse {
   base_directory: string;
 }
 
+export interface SearchResult {
+  artifact_type: string;
+  artifact_ref: string;
+  display_text?: string | null;
+  payload?: Record<string, unknown> | null;
+}
+
+export interface SearchResponse {
+  query: string;
+  items: SearchResult[];
+}
+
 export const api = {
   listBackups: (token: string) => request<DiscoverResponse>('/backups', 'GET', { token }),
   refreshBackups: (token: string) => request<DiscoverResponse>('/backups/refresh', 'POST', { token }),
@@ -240,6 +252,11 @@ export const api = {
   listContacts: (backupId: string, token: string) =>
     request<{ items: ContactRecord[] }>(`/backups/${backupId}/artifacts/contacts`, 'GET', {
       token,
+    }),
+  search: (backupId: string, query: string, token: string) =>
+    request<SearchResponse>(`/backups/${backupId}/search`, 'GET', {
+      token,
+      query: { q: query },
     }),
   downloadFile: async (backupId: string, fileId: string, token: string, sessionToken?: string) => {
     const urlString = apiUrl(`/backups/${backupId}/file/${fileId}`);
