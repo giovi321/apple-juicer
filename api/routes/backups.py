@@ -1,4 +1,3 @@
-import inspect
 import logging
 import shutil
 from datetime import datetime, timezone
@@ -13,24 +12,20 @@ from api import schemas
 from api.dependencies import (
     get_backup_registry,
     get_db_session,
-    get_decrypt_orchestrator,
     get_unlock_manager,
 )
 from api.routes._common import get_decrypted_backup, get_filesystem_from_decrypted
 from api.security import require_api_token, require_session_token
-from core.artifacts import filename_to_key
 from core.config import get_settings
 from core.db.models import DecryptionStatus
 from core.queue import get_queue
 from core.services import (
     BackupRegistry,
-    DecryptionError,
-    DecryptOrchestrator,
     SessionNotFoundError,
     UnlockError,
     UnlockManager,
 )
-from worker.tasks import _truncate_artifacts, index_backup_job
+from worker.tasks import _truncate_artifacts, decrypt_backup_job
 
 logger = logging.getLogger(__name__)
 
@@ -93,70 +88,28 @@ async def refresh_backups(registry: BackupRegistry = Depends(get_backup_registry
     return schemas.DiscoverResponse(backups=payload, base_directory=host_display_path)
 
 
-def _extract_artifact_databases(decrypted_path: str) -> dict[str, str]:
-    """Map present artifact DB files to their artifact keys (registry-driven)."""
-    decrypted_dir = Path(decrypted_path)
-    artifact_files = {}
-    for db_name, artifact_type in filename_to_key().items():
-        db_path = decrypted_dir / db_name
-        if db_path.exists():
-            artifact_files[artifact_type] = str(db_path)
-    return artifact_files
-
-
-def _queue_artifact_indexing(backup_id: str, decrypted_path: str) -> None:
-    """Queue artifact indexing job for the decrypted backup using RQ."""
-    try:
-        artifact_files = _extract_artifact_databases(decrypted_path)
-        if not artifact_files:
-            logger.info(f"No artifact databases found for backup {backup_id}")
-            return
-
-        # RQ runs the enqueued callable synchronously in the worker and never
-        # awaits it. Enqueueing a coroutine function (the async _index_backup_job)
-        # therefore silently no-ops. Enqueue the sync wrapper and fail loudly if
-        # that contract is ever broken.
-        if inspect.iscoroutinefunction(index_backup_job):
-            raise TypeError("index_backup_job must be a synchronous callable for RQ")
-
-        queue = get_queue()
-        queue.enqueue(index_backup_job, backup_id, decrypted_path, artifact_files)
-        logger.info(f"Queued artifact indexing job for backup {backup_id} with {len(artifact_files)} artifacts")
-    except Exception as exc:
-        logger.error(f"Failed to queue artifact indexing for backup {backup_id}: {exc}")
-
-
 @router.post("/{backup_id}/decrypt", response_model=schemas.DecryptStatusResponse)
 async def decrypt_backup(
     backup_id: str,
     body: schemas.DecryptRequest,
     registry: BackupRegistry = Depends(get_backup_registry),
-    orchestrator: DecryptOrchestrator = Depends(get_decrypt_orchestrator),
     session: AsyncSession = Depends(get_db_session),
 ):
     backup = await registry.get_backup(backup_id)
     if not backup:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Backup not found.")
 
+    # Mark DECRYPTING and hand off to the worker so the request returns
+    # immediately; decryption of a large backup can take minutes. The client
+    # polls /decrypt-status for completion.
     backup.decryption_status = DecryptionStatus.DECRYPTING
     backup.decryption_error = None
-    await session.flush()
-
-    try:
-        decrypted_path = orchestrator.decrypt_backup(backup, body.password)
-        backup.decrypted_path = decrypted_path
-        backup.decryption_status = DecryptionStatus.DECRYPTED
-        backup.decrypted_at = datetime.now(timezone.utc)
-    except DecryptionError as exc:
-        backup.decryption_status = DecryptionStatus.FAILED
-        backup.decryption_error = str(exc)
-        await session.commit()
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
-
     await session.commit()
 
-    # Queue artifact indexing in background
-    _queue_artifact_indexing(backup.ios_identifier, decrypted_path)
+    # result_ttl=0 so the password (a job argument) does not linger in Redis
+    # after the job finishes.
+    queue = get_queue()
+    queue.enqueue(decrypt_backup_job, backup.ios_identifier, body.password, result_ttl=0)
 
     return schemas.DecryptStatusResponse(
         backup_id=backup.ios_identifier,

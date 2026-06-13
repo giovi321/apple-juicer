@@ -43,6 +43,20 @@ function Breadcrumbs({ currentState, onNavigate }: { currentState: AppState; onN
   );
 }
 
+async function pollDecryptStatus(backupId: string, token: string) {
+  // Decryption now runs in the worker; poll until it finishes or fails.
+  // A large backup can take several minutes, so cap at ~20 minutes.
+  const maxAttempts = 600;
+  for (let i = 0; i < maxAttempts; i++) {
+    const status = await api.getDecryptStatus(backupId, token);
+    if (status.decryption_status === 'decrypted' || status.decryption_status === 'failed') {
+      return status;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 2000));
+  }
+  return api.getDecryptStatus(backupId, token);
+}
+
 function AppNew() {
   const [apiToken, setApiToken] = useLocalStorage<string>('ibe.apiToken', '');
   const [backupSessions, setBackupSessions] = useLocalStorage<Record<string, string>>('ibe.backupSessions', {});
@@ -117,8 +131,9 @@ function AppNew() {
     setDecryptMessage('Decrypting backup…');
     setDecryptingBackupId(selectedBackup.id);
     try {
-      const response = await api.decryptBackup(selectedBackup.id, password, apiToken);
-      if (response.decryption_status === 'decrypted') {
+      await api.decryptBackup(selectedBackup.id, password, apiToken);
+      const final = await pollDecryptStatus(selectedBackup.id, apiToken);
+      if (final.decryption_status === 'decrypted') {
         try {
           const unlock = await api.unlockBackup(selectedBackup.id, password, apiToken);
           handleSessionToken(unlock.session_token);
@@ -128,11 +143,9 @@ function AppNew() {
         setDecryptMessage(null);
         setDecryptingBackupId(null);
         setAppState('explorer');
-      } else if (response.decryption_status === 'failed') {
-        setDecryptMessage(response.error || 'Decryption failed. Please try again.');
-        setDecryptingBackupId(null);
       } else {
-        setDecryptMessage('Decrypting backup…');
+        setDecryptMessage(final.error || 'Decryption failed. Please try again.');
+        setDecryptingBackupId(null);
       }
     } catch (err) {
       setDecryptMessage(err instanceof Error ? err.message : 'Decryption failed');
