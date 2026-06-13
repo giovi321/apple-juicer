@@ -201,6 +201,24 @@ async def ingest_whatsapp(session: AsyncSession, backup: Backup, db_path: Path |
         for msg, msg_row in message_pairs:
             message_key[(msg.chat_guid, msg.message_id)] = msg_row.id
 
+        await _add_search_rows(
+            session,
+            backup,
+            "whatsapp_message",
+            [
+                ArtifactSearchIndex(
+                    backup_id=backup.id,
+                    artifact_type="whatsapp_message",
+                    artifact_ref=msg.message_id,
+                    display_text=(msg.body[:120] if msg.body else None),
+                    payload={"chat_guid": msg.chat_guid, "message_id": msg.message_id},
+                    search_text=" ".join(filter(None, [msg.body, msg.sender_name])),
+                )
+                for msg, _row in message_pairs
+                if msg.body
+            ],
+        )
+
         backup.indexing_progress = (backup.indexing_progress or 0) + len(message_rows)
         await session.flush()
         await session.commit()
@@ -277,6 +295,24 @@ async def ingest_messages(session: AsyncSession, backup: Backup, db_path: Path |
     await session.flush()
     message_map = {msg.guid: row.id for msg, row in zip(messages, message_rows)}
 
+    await _add_search_rows(
+        session,
+        backup,
+        "message",
+        [
+            ArtifactSearchIndex(
+                backup_id=backup.id,
+                artifact_type="message",
+                artifact_ref=msg.guid,
+                display_text=(msg.text[:120] if msg.text else None),
+                payload={"conversation_guid": msg.chat_guid, "message_guid": msg.guid},
+                search_text=" ".join(filter(None, [msg.text, msg.sender])),
+            )
+            for msg in messages
+            if msg.text
+        ],
+    )
+
     attachment_rows = []
     for msg, attachment in attachments:
         message_id = message_map.get(msg.guid)
@@ -316,6 +352,22 @@ async def ingest_notes(session: AsyncSession, backup: Backup, db_path: Path | No
         for note in notes
     ]
     session.add_all(note_rows)
+    await _add_search_rows(
+        session,
+        backup,
+        "note",
+        [
+            ArtifactSearchIndex(
+                backup_id=backup.id,
+                artifact_type="note",
+                artifact_ref=note.identifier,
+                display_text=note.title,
+                payload=note.metadata,
+                search_text=" ".join(filter(None, [note.title, note.body, note.folder])),
+            )
+            for note in notes
+        ],
+    )
     backup.indexing_progress = (backup.indexing_progress or 0) + 1
     await session.flush()
 
@@ -339,6 +391,7 @@ async def ingest_calendar(session: AsyncSession, backup: Backup, db_path: Path |
     session.add_all(calendar_rows)
     await session.flush()
     calendar_map = {cal.identifier: row.id for cal, row in zip(calendars, calendar_rows)}
+    calendar_name_by_identifier = {cal.identifier: cal.name for cal in calendars}
 
     event_rows = []
     for event in events:
@@ -359,6 +412,22 @@ async def ingest_calendar(session: AsyncSession, backup: Backup, db_path: Path |
             )
         )
     session.add_all(event_rows)
+    await _add_search_rows(
+        session,
+        backup,
+        "calendar_event",
+        [
+            ArtifactSearchIndex(
+                backup_id=backup.id,
+                artifact_type="calendar_event",
+                artifact_ref=event.identifier,
+                display_text=event.title,
+                payload={"calendar_name": calendar_name_by_identifier.get(event.calendar_identifier)},
+                search_text=" ".join(filter(None, [event.title, event.location, event.notes])),
+            )
+            for event in events
+        ],
+    )
     backup.indexing_progress = (backup.indexing_progress or 0) + 1
     await session.flush()
 
@@ -385,6 +454,26 @@ async def ingest_contacts(session: AsyncSession, backup: Backup, db_path: Path |
         for contact in contacts
     ]
     session.add_all(contact_rows)
+    await _add_search_rows(
+        session,
+        backup,
+        "contact",
+        [
+            ArtifactSearchIndex(
+                backup_id=backup.id,
+                artifact_type="contact",
+                artifact_ref=contact.identifier,
+                display_text=" ".join(filter(None, [contact.first_name, contact.last_name])) or contact.company,
+                search_text=" ".join(
+                    filter(
+                        None,
+                        [contact.first_name, contact.last_name, contact.company, *(contact.emails or []), *(contact.phones or [])],
+                    )
+                ),
+            )
+            for contact in contacts
+        ],
+    )
     backup.indexing_progress = (backup.indexing_progress or 0) + 1
     await session.flush()
 

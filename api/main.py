@@ -13,6 +13,7 @@ from api.routes import (
     artifacts_photos,
     artifacts_whatsapp,
     backups,
+    search,
 )
 from core.config import get_settings
 from core.db.session import init_models
@@ -64,6 +65,7 @@ def create_app() -> FastAPI:
     app.include_router(artifacts_notes.router)
     app.include_router(artifacts_calendar.router)
     app.include_router(artifacts_contacts.router)
+    app.include_router(search.router)
 
     return app
 
