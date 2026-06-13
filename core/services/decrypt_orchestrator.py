@@ -7,6 +7,7 @@ from typing import Optional
 
 from iphone_backup_decrypt.iphone_backup import EncryptedBackup
 
+from core.artifacts import decrypt_targets
 from core.config import get_settings
 from core.db.models import Backup
 
@@ -68,15 +69,9 @@ class DecryptOrchestrator:
             # Extract artifact database files with their correct domains.
             # Individual artifact DBs are optional (a backup may simply not
             # contain WhatsApp, Notes, etc.), so missing ones are recorded but
-            # do not fail decryption.
-            artifact_databases = [
-                ("AppDomainGroup-group.net.whatsapp.WhatsApp.shared", "ChatStorage.sqlite", "ChatStorage.sqlite"),
-                ("HomeDomain", "Library/SMS/sms.db", "chat.db"),
-                ("AppDomain-com.apple.mobilenotes", "Library/Notes/notes.sqlite", "notes.sqlite"),
-                ("HomeDomain", "Library/Calendar/Calendar.sqlitedb", "Calendar.sqlite"),
-                ("HomeDomain", "Library/AddressBook/AddressBook.sqlitedb", "AddressBook.sqlitedb"),
-                ("CameraRollDomain", "Media/PhotoData/Photos.sqlite", "Photos.sqlite"),
-            ]
+            # do not fail decryption. The domain/path/filename triples come from
+            # the artifact registry so they cannot drift from the indexer.
+            artifact_databases = decrypt_targets()
 
             extracted: list[str] = []
             missing: list[str] = []
