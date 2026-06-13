@@ -1,0 +1,94 @@
+.artifact-tab {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  height: 100%;
+  overflow: hidden;
+}
+
+.artifact-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.artifact-count {
+  font-size: 0.85rem;
+  opacity: 0.7;
+}
+
+.artifact-scroll {
+  overflow-y: auto;
+  flex: 1;
+  min-height: 0;
+}
+
+.artifact-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+
+.artifact-table th,
+.artifact-table td {
+  text-align: left;
+  padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  vertical-align: top;
+}
+
+.artifact-table th {
+  position: sticky;
+  top: 0;
+  background: #1b1f27;
+  font-weight: 600;
+  opacity: 0.8;
+}
+
+.artifact-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  overflow-y: auto;
+  flex: 1;
+  min-height: 0;
+}
+
+.artifact-card {
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  padding: 0.75rem 0.9rem;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.artifact-card-title {
+  font-weight: 600;
+  margin-bottom: 0.25rem;
+}
+
+.artifact-card-meta {
+  font-size: 0.78rem;
+  opacity: 0.6;
+  margin-bottom: 0.35rem;
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.artifact-card-body {
+  font-size: 0.88rem;
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 8rem;
+  overflow: hidden;
+}
+
+.artifact-chip {
+  display: inline-block;
+  padding: 0.1rem 0.5rem;
+  margin: 0.1rem 0.25rem 0.1rem 0;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  font-size: 0.78rem;
+}

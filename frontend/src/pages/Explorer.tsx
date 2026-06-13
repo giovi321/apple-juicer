@@ -10,6 +10,10 @@ import {
   type WhatsAppChat,
   type WhatsAppMessage,
 } from '../lib/api';
+import { PhotosTab } from './modules/PhotosTab';
+import { NotesTab } from './modules/NotesTab';
+import { CalendarTab } from './modules/CalendarTab';
+import { ContactsTab } from './modules/ContactsTab';
 import '../styles/Explorer.css';
 
 interface ExplorerProps {
@@ -1645,33 +1649,13 @@ export function Explorer({ apiToken, backup, sessionToken, onSessionToken }: Exp
           </div>
         )}
 
-        {activeModule === 'photos' && (
-          <div className="coming-soon">
-            <h3>Photos</h3>
-            <p>Photos timeline coming soon...</p>
-          </div>
-        )}
+        {activeModule === 'photos' && <PhotosTab apiToken={apiToken} backupId={backup.id} />}
 
-        {activeModule === 'notes' && (
-          <div className="coming-soon">
-            <h3>Notes</h3>
-            <p>Notes functionality coming soon...</p>
-          </div>
-        )}
+        {activeModule === 'notes' && <NotesTab apiToken={apiToken} backupId={backup.id} />}
 
-        {activeModule === 'calendar' && (
-          <div className="coming-soon">
-            <h3>Calendar</h3>
-            <p>Calendar events coming soon...</p>
-          </div>
-        )}
+        {activeModule === 'calendar' && <CalendarTab apiToken={apiToken} backupId={backup.id} />}
 
-        {activeModule === 'contacts' && (
-          <div className="coming-soon">
-            <h3>Contacts</h3>
-            <p>Address book coming soon...</p>
-          </div>
-        )}
+        {activeModule === 'contacts' && <ContactsTab apiToken={apiToken} backupId={backup.id} />}
       </div>
       </div>
 
