@@ -11,6 +11,11 @@ os.environ.setdefault("APPLE_JUICER_ENVIRONMENT", "test")
 os.environ["APPLE_JUICER_POSTGRES__DSN"] = f"sqlite+aiosqlite:///{(_TMP_DIR / 'test.db').as_posix()}"
 os.environ.setdefault("APPLE_JUICER_REDIS__URL", "redis://localhost:6379/0")
 os.environ.setdefault("APPLE_JUICER_SECURITY__API_TOKEN", "test-token")
+# Service singletons in api.dependencies create these dirs at import time, so
+# they must point somewhere writable (the default /data is root-owned on CI).
+os.environ.setdefault("APPLE_JUICER_BACKUP_PATHS__BASE_PATH", str(_TMP_DIR / "ios_backups"))
+os.environ.setdefault("APPLE_JUICER_BACKUP_PATHS__TEMP_PATH", str(_TMP_DIR / "tmp"))
+os.environ.setdefault("APPLE_JUICER_BACKUP_PATHS__DECRYPTED_PATH", str(_TMP_DIR / "decrypted"))
 
 import pytest_asyncio  # noqa: E402
 
