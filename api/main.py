@@ -5,7 +5,7 @@ import logging
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from api.routes import backups
+from api.routes import artifacts_messages, artifacts_whatsapp, backups
 from core.config import get_settings
 from core.db.session import init_models
 
@@ -50,6 +50,8 @@ def create_app() -> FastAPI:
             logger.info("Database schema ensured via init_models()")
 
     app.include_router(backups.router)
+    app.include_router(artifacts_whatsapp.router)
+    app.include_router(artifacts_messages.router)
 
     return app
 
