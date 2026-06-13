@@ -24,7 +24,8 @@ class BackupRegistry:
         self._lock = asyncio.Lock()
 
     async def refresh(self) -> List[BackupSummary]:
-        summaries = self.discovery.discover()
+        # Filesystem discovery is blocking I/O; keep it off the event loop.
+        summaries = await asyncio.to_thread(self.discovery.discover)
         summary_map = {summary.backup_id: summary for summary in summaries}
         async with self._lock:
             existing = {backup.ios_identifier: backup for backup in await self._fetch_all()}

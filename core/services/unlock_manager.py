@@ -45,6 +45,8 @@ class UnlockManager:
             raise UnlockError("Invalid password") from exc
         except Exception as exc:  # pragma: no cover - safety net
             raise UnlockError(str(exc)) from exc
+        # Opportunistically drop expired sessions so the in-memory cache stays bounded.
+        self.cache.purge_expired()
         token = self.cache.put(backup.ios_identifier, handle)
         backup.status = BackupStatus.UNLOCKED
         return UnlockResult(token=token, ttl_seconds=self.cache.ttl_seconds)
