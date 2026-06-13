@@ -8,7 +8,7 @@ import inspect
 
 from core.artifacts import REGISTRY, decrypt_targets, filename_to_key
 
-EXPECTED_KEYS = {"photos", "whatsapp", "messages", "notes", "calendar", "contacts"}
+EXPECTED_KEYS = {"photos", "whatsapp", "messages", "notes", "calendar", "contacts", "calls"}
 
 
 def test_registry_covers_expected_artifacts():

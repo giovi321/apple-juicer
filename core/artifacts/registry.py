@@ -49,6 +49,13 @@ REGISTRY: list[ArtifactSpec] = [
         source_relative_path="Library/AddressBook/AddressBook.sqlitedb",
         ingest=ingest.ingest_contacts,
     ),
+    ArtifactSpec(
+        key="calls",
+        db_filename="CallHistory.storedata",
+        source_domain="HomeDomain",
+        source_relative_path="Library/CallHistoryDB/CallHistory.storedata",
+        ingest=ingest.ingest_calls,
+    ),
 ]
 
 

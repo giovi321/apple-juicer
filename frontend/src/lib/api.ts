@@ -1,6 +1,7 @@
 import type {
   BackupStatus,
   CalendarEvent,
+  CallRecord,
   ContactRecord,
   MessageConversation,
   MessageItem,
@@ -14,6 +15,7 @@ import type {
 export type {
   BackupStatus,
   CalendarEvent,
+  CallRecord,
   ContactRecord,
   MessageAttachment,
   MessageConversation,
@@ -251,6 +253,10 @@ export const api = {
     }),
   listContacts: (backupId: string, token: string) =>
     request<{ items: ContactRecord[] }>(`/backups/${backupId}/artifacts/contacts`, 'GET', {
+      token,
+    }),
+  listCalls: (backupId: string, token: string) =>
+    request<{ items: CallRecord[] }>(`/backups/${backupId}/artifacts/calls`, 'GET', {
       token,
     }),
   search: (backupId: string, query: string, token: string) =>

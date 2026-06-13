@@ -14,6 +14,7 @@ import { PhotosTab } from './modules/PhotosTab';
 import { NotesTab } from './modules/NotesTab';
 import { CalendarTab } from './modules/CalendarTab';
 import { ContactsTab } from './modules/ContactsTab';
+import { CallsTab } from './modules/CallsTab';
 import { SearchTab } from './modules/SearchTab';
 import '../styles/Explorer.css';
 
@@ -24,7 +25,16 @@ interface ExplorerProps {
   onSessionToken?: (token: string) => void;
 }
 
-type ModuleView = 'files' | 'whatsapp' | 'messages' | 'photos' | 'notes' | 'calendar' | 'contacts' | 'search';
+type ModuleView =
+  | 'files'
+  | 'whatsapp'
+  | 'messages'
+  | 'photos'
+  | 'notes'
+  | 'calendar'
+  | 'contacts'
+  | 'calls'
+  | 'search';
 
 const MODULES: { id: ModuleView; label: string; description: string }[] = [
   { id: 'search', label: 'Search', description: 'Search across all artifacts' },
@@ -35,6 +45,7 @@ const MODULES: { id: ModuleView; label: string; description: string }[] = [
   { id: 'notes', label: 'Notes', description: 'Notes database' },
   { id: 'calendar', label: 'Calendar', description: 'Calendar events' },
   { id: 'contacts', label: 'Contacts', description: 'Address book entries' },
+  { id: 'calls', label: 'Calls', description: 'Call history' },
 ];
 
 export function Explorer({ apiToken, backup, sessionToken, onSessionToken }: ExplorerProps) {
@@ -1658,6 +1669,8 @@ export function Explorer({ apiToken, backup, sessionToken, onSessionToken }: Exp
         {activeModule === 'calendar' && <CalendarTab apiToken={apiToken} backupId={backup.id} />}
 
         {activeModule === 'contacts' && <ContactsTab apiToken={apiToken} backupId={backup.id} />}
+
+        {activeModule === 'calls' && <CallsTab apiToken={apiToken} backupId={backup.id} />}
 
         {activeModule === 'search' && <SearchTab apiToken={apiToken} backupId={backup.id} />}
       </div>

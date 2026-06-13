@@ -8,6 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from api.routes import (
     artifacts_calendar,
+    artifacts_calls,
     artifacts_contacts,
     artifacts_messages,
     artifacts_notes,
@@ -72,6 +73,7 @@ def create_app() -> FastAPI:
     app.include_router(artifacts_notes.router)
     app.include_router(artifacts_calendar.router)
     app.include_router(artifacts_contacts.router)
+    app.include_router(artifacts_calls.router)
     app.include_router(search.router)
 
     return app

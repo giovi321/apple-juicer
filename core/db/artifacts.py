@@ -206,6 +206,21 @@ class Contact(Base):
     avatar_file_id: Mapped[str | None] = mapped_column(String(128))
 
 
+class CallRecord(Base):
+    __tablename__ = "call_records"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    backup_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("backups.id", ondelete="CASCADE"), index=True)
+    call_identifier: Mapped[str] = mapped_column(String(255), index=True)
+    address: Mapped[str | None] = mapped_column(String(255))
+    display_name: Mapped[str | None] = mapped_column(String(255))
+    occurred_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), index=True)
+    duration_seconds: Mapped[int | None]
+    is_outgoing: Mapped[bool] = mapped_column(Boolean, default=False)
+    answered: Mapped[bool] = mapped_column(Boolean, default=False)
+    service: Mapped[str | None] = mapped_column(String(64))
+
+
 class ArtifactSearchIndex(Base):
     __tablename__ = "artifact_search_index"
 
