@@ -6,6 +6,7 @@ from . import (
     artifacts_photos,
     artifacts_whatsapp,
     backups,
+    search,
 )
 
 __all__ = [
@@ -16,4 +17,5 @@ __all__ = [
     "artifacts_photos",
     "artifacts_whatsapp",
     "backups",
+    "search",
 ]

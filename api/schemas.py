@@ -203,3 +203,15 @@ class ContactModel(BaseModel):
 
 class ContactListResponse(BaseModel):
     items: list[ContactModel]
+
+
+class SearchResultModel(BaseModel):
+    artifact_type: str
+    artifact_ref: str
+    display_text: Optional[str] = None
+    payload: Optional[dict[str, Any]] = None
+
+
+class SearchResponse(BaseModel):
+    query: str
+    items: list[SearchResultModel]
