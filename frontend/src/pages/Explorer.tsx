@@ -14,6 +14,7 @@ import { PhotosTab } from './modules/PhotosTab';
 import { NotesTab } from './modules/NotesTab';
 import { CalendarTab } from './modules/CalendarTab';
 import { ContactsTab } from './modules/ContactsTab';
+import { SearchTab } from './modules/SearchTab';
 import '../styles/Explorer.css';
 
 interface ExplorerProps {
@@ -23,9 +24,10 @@ interface ExplorerProps {
   onSessionToken?: (token: string) => void;
 }
 
-type ModuleView = 'files' | 'whatsapp' | 'messages' | 'photos' | 'notes' | 'calendar' | 'contacts';
+type ModuleView = 'files' | 'whatsapp' | 'messages' | 'photos' | 'notes' | 'calendar' | 'contacts' | 'search';
 
 const MODULES: { id: ModuleView; label: string; description: string }[] = [
+  { id: 'search', label: 'Search', description: 'Search across all artifacts' },
   { id: 'files', label: 'Manifest', description: 'Browse manifest entries' },
   { id: 'whatsapp', label: 'WhatsApp', description: 'Explore chats and messages' },
   { id: 'messages', label: 'Messages', description: 'iMessage/SMS conversations' },
@@ -1656,6 +1658,8 @@ export function Explorer({ apiToken, backup, sessionToken, onSessionToken }: Exp
         {activeModule === 'calendar' && <CalendarTab apiToken={apiToken} backupId={backup.id} />}
 
         {activeModule === 'contacts' && <ContactsTab apiToken={apiToken} backupId={backup.id} />}
+
+        {activeModule === 'search' && <SearchTab apiToken={apiToken} backupId={backup.id} />}
       </div>
       </div>
 
