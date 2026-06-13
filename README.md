@@ -54,14 +54,14 @@ npm install
 npm run dev
 ```
 
-3. Run database migrations:
+3. Run database migrations (optional — the backend also applies them automatically on startup):
 ```bash
 alembic upgrade head
 ```
 
 4. Start the backend:
 ```bash
-uvicorn api.main:app --reload
+uvicorn api.main:create_app --factory --reload
 ```
 
 ## Documentation

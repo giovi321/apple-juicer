@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import logging
 
 from fastapi import FastAPI
@@ -16,9 +17,15 @@ from api.routes import (
     search,
 )
 from core.config import get_settings
-from core.db.session import init_models
 
 logger = logging.getLogger(__name__)
+
+
+def _run_migrations() -> None:
+    from alembic import command
+    from alembic.config import Config
+
+    command.upgrade(Config("alembic.ini"), "head")
 
 
 def create_app() -> FastAPI:
@@ -51,12 +58,12 @@ def create_app() -> FastAPI:
     async def favicon():
         return None
 
-    if settings.environment != "production":
-        # Development deployments rely on init_models() instead of Alembic.
-        @app.on_event("startup")
-        async def ensure_schema() -> None:
-            await init_models()
-            logger.info("Database schema ensured via init_models()")
+    @app.on_event("startup")
+    async def ensure_schema() -> None:
+        # Apply migrations on boot. Run in a thread because Alembic's command
+        # API starts its own event loop, which cannot nest in this one.
+        await asyncio.to_thread(_run_migrations)
+        logger.info("Database schema migrated to head")
 
     app.include_router(backups.router)
     app.include_router(artifacts_whatsapp.router)
