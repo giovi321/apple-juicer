@@ -5,7 +5,15 @@ import logging
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from api.routes import artifacts_messages, artifacts_whatsapp, backups
+from api.routes import (
+    artifacts_calendar,
+    artifacts_contacts,
+    artifacts_messages,
+    artifacts_notes,
+    artifacts_photos,
+    artifacts_whatsapp,
+    backups,
+)
 from core.config import get_settings
 from core.db.session import init_models
 
@@ -52,6 +60,10 @@ def create_app() -> FastAPI:
     app.include_router(backups.router)
     app.include_router(artifacts_whatsapp.router)
     app.include_router(artifacts_messages.router)
+    app.include_router(artifacts_photos.router)
+    app.include_router(artifacts_notes.router)
+    app.include_router(artifacts_calendar.router)
+    app.include_router(artifacts_contacts.router)
 
     return app
 

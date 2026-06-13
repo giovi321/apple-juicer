@@ -143,3 +143,63 @@ class MessageConversationListResponse(BaseModel):
 class MessageConversationDetailResponse(BaseModel):
     conversation: MessageConversationModel
     messages: list[MessageItemModel]
+
+
+class PhotoAssetModel(BaseModel):
+    asset_id: Optional[str] = None
+    original_filename: Optional[str] = None
+    relative_path: Optional[str] = None
+    file_id: Optional[str] = None
+    taken_at: Optional[datetime] = None
+    timezone_offset_minutes: Optional[int] = None
+    width: Optional[int] = None
+    height: Optional[int] = None
+    media_type: Optional[str] = None
+    metadata: Optional[dict[str, Any]] = None
+
+
+class PhotoListResponse(BaseModel):
+    items: list[PhotoAssetModel]
+
+
+class NoteModel(BaseModel):
+    note_identifier: str
+    title: Optional[str] = None
+    body: Optional[str] = None
+    folder: Optional[str] = None
+    created_at: Optional[datetime] = None
+    last_modified_at: Optional[datetime] = None
+
+
+class NoteListResponse(BaseModel):
+    items: list[NoteModel]
+
+
+class CalendarEventModel(BaseModel):
+    event_identifier: str
+    calendar_identifier: Optional[str] = None
+    calendar_name: Optional[str] = None
+    title: Optional[str] = None
+    location: Optional[str] = None
+    notes: Optional[str] = None
+    starts_at: Optional[datetime] = None
+    ends_at: Optional[datetime] = None
+    is_all_day: bool = False
+
+
+class CalendarEventListResponse(BaseModel):
+    items: list[CalendarEventModel]
+
+
+class ContactModel(BaseModel):
+    contact_identifier: str
+    first_name: Optional[str] = None
+    last_name: Optional[str] = None
+    company: Optional[str] = None
+    emails: list[str] = []
+    phones: list[str] = []
+    avatar_file_id: Optional[str] = None
+
+
+class ContactListResponse(BaseModel):
+    items: list[ContactModel]
