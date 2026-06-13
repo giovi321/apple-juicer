@@ -11,6 +11,7 @@ from starlette.background import BackgroundTask
 from api import schemas
 from api.dependencies import get_backup_registry, get_db_session, get_unlock_manager, get_decrypt_orchestrator
 from api.security import require_api_token, require_session_token
+from core.artifacts import filename_to_key
 from core.config import get_settings
 from core.queue import get_queue
 from core.services import BackupRegistry, SessionNotFoundError, UnlockError, UnlockManager, DecryptOrchestrator, DecryptionError
@@ -86,25 +87,13 @@ async def refresh_backups(registry: BackupRegistry = Depends(get_backup_registry
 
 
 def _extract_artifact_databases(decrypted_path: str) -> dict[str, str]:
-    """Extract artifact database file paths from decrypted backup."""
+    """Map present artifact DB files to their artifact keys (registry-driven)."""
     decrypted_dir = Path(decrypted_path)
     artifact_files = {}
-    
-    # Map of database names to artifact types
-    db_mappings = {
-        "Photos.sqlite": "photos",
-        "ChatStorage.sqlite": "whatsapp",
-        "chat.db": "messages",
-        "notes.sqlite": "notes",
-        "Calendar.sqlite": "calendar",
-        "AddressBook.sqlitedb": "contacts",
-    }
-    
-    for db_name, artifact_type in db_mappings.items():
+    for db_name, artifact_type in filename_to_key().items():
         db_path = decrypted_dir / db_name
         if db_path.exists():
             artifact_files[artifact_type] = str(db_path)
-    
     return artifact_files
 
 
