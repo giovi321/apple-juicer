@@ -22,10 +22,15 @@ def test_index_job_sync_async_contract():
     assert inspect.iscoroutinefunction(_index_backup_job)
 
 
-def test_queue_enqueues_sync_callable(monkeypatch, tmp_path):
-    """The decrypt route must enqueue the sync wrapper, never the coroutine."""
+async def test_decrypt_route_enqueues_sync_job(db, tmp_path, monkeypatch):
+    """The decrypt route marks DECRYPTING and enqueues the sync decrypt job."""
     import api.routes.backups as routes
     import worker.tasks as tasks
+    from sqlalchemy import select
+
+    from api import schemas
+    from core.db.models import Backup, DecryptionStatus
+    from core.db.session import async_session_factory
 
     captured: dict = {}
 
@@ -33,18 +38,36 @@ def test_queue_enqueues_sync_callable(monkeypatch, tmp_path):
         def enqueue(self, func, *args, **kwargs):
             captured["func"] = func
             captured["args"] = args
-            return None
+            captured["kwargs"] = kwargs
 
     monkeypatch.setattr(routes, "get_queue", lambda *a, **k: FakeQueue())
 
-    decrypted = tmp_path / "decrypted"
-    decrypted.mkdir()
-    (decrypted / "Calendar.sqlite").write_bytes(b"placeholder")
+    backup_id = "DEC-ROUTE-1"
+    async with async_session_factory() as session:
+        session.add(Backup(ios_identifier=backup_id, path=str(tmp_path), display_name="t", is_encrypted=True))
+        await session.commit()
 
-    routes._queue_artifact_indexing("B1", str(decrypted))
+    class _Registry:
+        def __init__(self, session):
+            self.session = session
 
-    assert captured.get("func") is tasks.index_backup_job
+        async def get_backup(self, identifier):
+            return await self.session.scalar(select(Backup).where(Backup.ios_identifier == identifier))
+
+    async with async_session_factory() as session:
+        registry = _Registry(session)
+        resp = await routes.decrypt_backup(
+            backup_id, schemas.DecryptRequest(password="pw"), registry=registry, session=session
+        )
+
+    assert resp.decryption_status == DecryptionStatus.DECRYPTING
+    assert captured["func"] is tasks.decrypt_backup_job
     assert not inspect.iscoroutinefunction(captured["func"])
+    assert captured["kwargs"].get("result_ttl") == 0
+
+    async with async_session_factory() as session:
+        backup = await session.scalar(select(Backup).where(Backup.ios_identifier == backup_id))
+        assert backup.decryption_status == DecryptionStatus.DECRYPTING
 
 
 async def _seed_backup(backup_id: str, src_path: str):
