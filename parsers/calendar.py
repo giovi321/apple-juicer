@@ -3,7 +3,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import List
 
 from .base import apple_timestamp, sqlite_connection, table_exists
 

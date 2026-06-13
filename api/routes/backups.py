@@ -1,17 +1,18 @@
 import shutil
 from datetime import datetime, timezone
 from pathlib import Path
+import inspect
 import logging
 
 from fastapi import APIRouter, Depends, Header, HTTPException, status
 from fastapi.responses import FileResponse
 from starlette.background import BackgroundTask
-from redis import Redis
 
 from api import schemas
 from api.dependencies import get_backup_registry, get_db_session, get_unlock_manager, get_decrypt_orchestrator
 from api.security import require_api_token, require_session_token
 from core.config import get_settings
+from core.queue import get_queue
 from core.services import BackupRegistry, SessionNotFoundError, UnlockError, UnlockManager, DecryptOrchestrator, DecryptionError
 from core.db.models import DecryptionStatus
 from sqlalchemy import select
@@ -20,6 +21,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from core.db.artifacts import WhatsAppChat, WhatsAppMessage, WhatsAppAttachment, MessageConversation, Message, MessageAttachment
 from core.db.models import Backup
 from sqlalchemy.orm import selectinload
+from worker.tasks import index_backup_job, _truncate_artifacts
 
 logger = logging.getLogger(__name__)
 
@@ -109,17 +111,21 @@ def _extract_artifact_databases(decrypted_path: str) -> dict[str, str]:
 def _queue_artifact_indexing(backup_id: str, decrypted_path: str) -> None:
     """Queue artifact indexing job for the decrypted backup using RQ."""
     try:
-        from rq import Queue
-        redis_conn = Redis.from_url(settings.redis.url)
-        queue = Queue(connection=redis_conn)
-        
         artifact_files = _extract_artifact_databases(decrypted_path)
-        if artifact_files:  # Only queue if there are artifacts to index
-            from worker.tasks import _index_backup_job
-            queue.enqueue(_index_backup_job, backup_id, decrypted_path, artifact_files)
-            logger.info(f"Queued artifact indexing job for backup {backup_id} with {len(artifact_files)} artifacts")
-        else:
+        if not artifact_files:
             logger.info(f"No artifact databases found for backup {backup_id}")
+            return
+
+        # RQ runs the enqueued callable synchronously in the worker and never
+        # awaits it. Enqueueing a coroutine function (the async _index_backup_job)
+        # therefore silently no-ops. Enqueue the sync wrapper and fail loudly if
+        # that contract is ever broken.
+        if inspect.iscoroutinefunction(index_backup_job):
+            raise TypeError("index_backup_job must be a synchronous callable for RQ")
+
+        queue = get_queue()
+        queue.enqueue(index_backup_job, backup_id, decrypted_path, artifact_files)
+        logger.info(f"Queued artifact indexing job for backup {backup_id} with {len(artifact_files)} artifacts")
     except Exception as exc:
         logger.error(f"Failed to queue artifact indexing for backup {backup_id}: {exc}")
 
@@ -211,7 +217,6 @@ async def delete_decrypted_data(
                 ) from exc
     
     # Delete indexed artifacts from database
-    from worker.tasks import _truncate_artifacts
     await _truncate_artifacts(session, backup)
     
     # Update database

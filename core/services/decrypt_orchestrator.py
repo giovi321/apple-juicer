@@ -1,15 +1,16 @@
 from __future__ import annotations
 
+import logging
 import shutil
-from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
 from iphone_backup_decrypt.iphone_backup import EncryptedBackup
 
-from core.backupfs.types import BackupStatus
 from core.config import get_settings
-from core.db.models import Backup, DecryptionStatus
+from core.db.models import Backup
+
+logger = logging.getLogger(__name__)
 
 
 class DecryptionError(Exception):
@@ -53,16 +54,21 @@ class DecryptOrchestrator:
             )
             handle.test_decryption()
 
-            settings = get_settings()
-
             manifest_db_path = decrypted_backup_dir / "Manifest.db"
             if manifest_db_path.exists():
                 manifest_db_path.unlink()
 
-            # Use save_manifest_file to save the decrypted Manifest.db
+            # Save the decrypted Manifest.db. Without it the backup is not
+            # browsable, so a missing manifest is a hard failure rather than a
+            # "decrypted" backup that silently yields nothing.
             handle.save_manifest_file(str(manifest_db_path))
+            if not manifest_db_path.exists():
+                raise DecryptionError("Decryption did not produce a Manifest database.")
 
-            # Extract artifact database files with their correct domains
+            # Extract artifact database files with their correct domains.
+            # Individual artifact DBs are optional (a backup may simply not
+            # contain WhatsApp, Notes, etc.), so missing ones are recorded but
+            # do not fail decryption.
             artifact_databases = [
                 ("AppDomainGroup-group.net.whatsapp.WhatsApp.shared", "ChatStorage.sqlite", "ChatStorage.sqlite"),
                 ("HomeDomain", "Library/SMS/sms.db", "chat.db"),
@@ -71,32 +77,32 @@ class DecryptOrchestrator:
                 ("HomeDomain", "Library/AddressBook/AddressBook.sqlitedb", "AddressBook.sqlitedb"),
                 ("CameraRollDomain", "Media/PhotoData/Photos.sqlite", "Photos.sqlite"),
             ]
-            
-            import logging
-            logger = logging.getLogger(__name__)
-            
-            for entry in artifact_databases:
+
+            extracted: list[str] = []
+            missing: list[str] = []
+            for domain_like, relative_path, output_name in artifact_databases:
+                db_path = decrypted_backup_dir / output_name
+                if db_path.exists():
+                    db_path.unlink()
                 try:
-                    domain_like, relative_path, output_name = entry
-                    db_path = decrypted_backup_dir / output_name
-                    if db_path.exists():
-                        db_path.unlink()
-                    
-                    logger.info(f"Extracting {output_name} from domain {domain_like}, path {relative_path}")
                     handle.extract_file(
                         relative_path=relative_path,
                         domain_like=domain_like,
-                        output_filename=str(db_path)
+                        output_filename=str(db_path),
                     )
-                    
-                    if db_path.exists():
-                        logger.info(f"Successfully extracted {output_name}")
-                    else:
-                        logger.warning(f"File {output_name} was not created after extraction")
-                        
-                except Exception as e:
-                    logger.warning(f"Failed to extract {output_name}: {type(e).__name__}: {e}")
-                    # Continue with other files
+                except Exception as exc:
+                    logger.warning("Failed to extract %s: %s: %s", output_name, type(exc).__name__, exc)
+                if db_path.exists():
+                    extracted.append(output_name)
+                else:
+                    missing.append(output_name)
+
+            logger.info(
+                "Decrypted backup %s: extracted artifact DBs %s; absent %s",
+                backup.ios_identifier,
+                extracted or ["none"],
+                missing or ["none"],
+            )
 
             return str(decrypted_backup_dir)
 
