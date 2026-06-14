@@ -106,8 +106,9 @@ Apple Juicer indexes ten artifact types, each with its own browsable view:
 | Locations | `routined` caches | Significant locations |
 | Voicemail | `voicemail.db` | Voicemail messages |
 
-On top of the per-artifact views, three features cut across all of them:
+On top of the per-artifact views, four features cut across all of them:
 
+- **People.** A contact-centric view that collapses one person's WhatsApp messages, iMessages, calls, and voicemails into a single entity, with the name resolved from Contacts. It answers *who*, where search answers *what* and the timeline answers *when*.
 - **Global search.** One query runs against every indexed type, and a hit links straight back to the conversation or record it came from.
 - **Unified timeline.** Messages, photos, calls and the rest merge into a single reverse-chronological stream.
 - **Export.** Download any tabular view as CSV, or generate a one-page PDF summary of the whole backup.

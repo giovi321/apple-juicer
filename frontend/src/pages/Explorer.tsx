@@ -3,6 +3,7 @@ import { api, type BackupSummary } from '../lib/api';
 import { FilesModule } from './modules/FilesModule';
 import { WhatsAppModule } from './modules/WhatsAppModule';
 import { MessagesModule } from './modules/MessagesModule';
+import { PeopleModule } from './modules/PeopleModule';
 import { PhotosTab } from './modules/PhotosTab';
 import { NotesTab } from './modules/NotesTab';
 import { CalendarTab } from './modules/CalendarTab';
@@ -25,6 +26,7 @@ interface ExplorerProps {
 
 type ModuleView =
   | 'files'
+  | 'people'
   | 'whatsapp'
   | 'messages'
   | 'photos'
@@ -40,6 +42,7 @@ type ModuleView =
 
 const MODULES: { id: ModuleView; label: string; description: string }[] = [
   { id: 'search', label: 'Search', description: 'Search across all artifacts' },
+  { id: 'people', label: 'People', description: 'Everything tied to a person' },
   { id: 'timeline', label: 'Timeline', description: 'Chronological activity' },
   { id: 'files', label: 'Manifest', description: 'Browse manifest entries' },
   { id: 'whatsapp', label: 'WhatsApp', description: 'Explore chats and messages' },
@@ -149,6 +152,8 @@ export function Explorer({ apiToken, backup, sessionToken, onSessionToken }: Exp
         <div className="module-content">
           <ErrorBoundary resetKey={activeModule} label={MODULES.find((m) => m.id === activeModule)?.label}>
           {activeModule === 'files' && <FilesModule apiToken={apiToken} backupId={backup.id} />}
+
+          {activeModule === 'people' && <PeopleModule apiToken={apiToken} backupId={backup.id} />}
 
           {activeModule === 'whatsapp' && (
             <WhatsAppModule

@@ -7,6 +7,8 @@ import type {
   MessageItem,
   LocationPoint,
   NoteRecord,
+  PersonDetail,
+  PersonSummary,
   PhotoAsset,
   SafariVisit,
   TimelineEvent,
@@ -26,6 +28,8 @@ export type {
   MessageConversation,
   MessageItem,
   NoteRecord,
+  PersonDetail,
+  PersonSummary,
   PhotoAsset,
   SafariVisit,
   TimelineEvent,
@@ -318,6 +322,10 @@ export const api = {
     }),
   getTimeline: (backupId: string, token: string) =>
     request<{ items: TimelineEvent[] }>(`/backups/${backupId}/timeline`, 'GET', { token }),
+  listPeople: (backupId: string, token: string) =>
+    request<{ items: PersonSummary[] }>(`/backups/${backupId}/people`, 'GET', { token }),
+  getPerson: (backupId: string, key: string, token: string) =>
+    request<PersonDetail>(`/backups/${backupId}/people/${encodeURIComponent(key)}`, 'GET', { token }),
   downloadFile: async (backupId: string, fileId: string, token: string, sessionToken?: string) => {
     const urlString = apiUrl(`/backups/${backupId}/file/${fileId}`);
     const response = await fetch(urlString, {
