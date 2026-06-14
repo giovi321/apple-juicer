@@ -74,7 +74,7 @@ def _pick_candidate(entries, wanted: str) -> tuple[str, str] | None:
     return None
 
 
-def download_attachment_response(
+def extract_attachment(
     fs,
     relative_path: str,
     *,
@@ -82,8 +82,10 @@ def download_attachment_response(
     strip_tilde: bool,
     session_present: bool,
     label: str,
-) -> FileResponse:
-    """Resolve an attachment by manifest search (then fallback domains) and stream it."""
+) -> tuple[Path, Path]:
+    """Resolve an attachment via the manifest (then fallback domains) and extract
+    it. Returns (payload_path, sandbox_dir); the caller owns the sandbox cleanup.
+    Raises HTTPException on failure."""
     requested_path = (relative_path or "").lstrip("/")
     if not requested_path:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="relative_path is required")
@@ -125,7 +127,7 @@ def download_attachment_response(
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Attachment file not found.")
 
     try:
-        payload_path, sandbox_dir = fs.extract_to_temp(domain=resolved_domain, relative_path=resolved_relative_path)
+        return fs.extract_to_temp(domain=resolved_domain, relative_path=resolved_relative_path)
     except Exception as e:
         logger.error(
             f"Failed to extract {label} attachment domain={resolved_domain} relative_path={resolved_relative_path}: {e}"
@@ -137,7 +139,26 @@ def download_attachment_response(
             )
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Attachment file not found.")
 
-    filename = Path(resolved_relative_path).name or "attachment"
+
+def download_attachment_response(
+    fs,
+    relative_path: str,
+    *,
+    fallback_domains: list[str],
+    strip_tilde: bool,
+    session_present: bool,
+    label: str,
+) -> FileResponse:
+    """Resolve an attachment and stream the original file."""
+    payload_path, sandbox_dir = extract_attachment(
+        fs,
+        relative_path,
+        fallback_domains=fallback_domains,
+        strip_tilde=strip_tilde,
+        session_present=session_present,
+        label=label,
+    )
+    filename = payload_path.name or "attachment"
     background = BackgroundTask(shutil.rmtree, sandbox_dir, True)
     mime_type, _ = mimetypes.guess_type(filename)
     return FileResponse(
