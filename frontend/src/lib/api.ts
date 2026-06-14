@@ -5,6 +5,7 @@ import type {
   ContactRecord,
   MessageConversation,
   MessageItem,
+  LocationPoint,
   NoteRecord,
   PhotoAsset,
   SafariVisit,
@@ -18,6 +19,7 @@ export type {
   CalendarEvent,
   CallRecord,
   ContactRecord,
+  LocationPoint,
   MessageAttachment,
   MessageConversation,
   MessageItem,
@@ -263,6 +265,10 @@ export const api = {
     }),
   listSafari: (backupId: string, token: string) =>
     request<{ items: SafariVisit[] }>(`/backups/${backupId}/artifacts/safari`, 'GET', {
+      token,
+    }),
+  listLocations: (backupId: string, token: string) =>
+    request<{ items: LocationPoint[] }>(`/backups/${backupId}/artifacts/locations`, 'GET', {
       token,
     }),
   downloadPhotoFile: async (backupId: string, relativePath: string, token: string, sessionToken?: string) => {

@@ -232,6 +232,20 @@ class SafariVisitListResponse(BaseModel):
     items: list[SafariVisitModel]
 
 
+class LocationModel(BaseModel):
+    location_identifier: str
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
+    altitude: Optional[float] = None
+    speed: Optional[float] = None
+    horizontal_accuracy: Optional[float] = None
+    recorded_at: Optional[datetime] = None
+
+
+class LocationListResponse(BaseModel):
+    items: list[LocationModel]
+
+
 class SearchResultModel(BaseModel):
     artifact_type: str
     artifact_ref: str

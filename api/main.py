@@ -10,6 +10,7 @@ from api.routes import (
     artifacts_calendar,
     artifacts_calls,
     artifacts_contacts,
+    artifacts_locations,
     artifacts_messages,
     artifacts_notes,
     artifacts_photos,
@@ -76,6 +77,7 @@ def create_app() -> FastAPI:
     app.include_router(artifacts_contacts.router)
     app.include_router(artifacts_calls.router)
     app.include_router(artifacts_safari.router)
+    app.include_router(artifacts_locations.router)
     app.include_router(search.router)
 
     return app

@@ -63,6 +63,13 @@ REGISTRY: list[ArtifactSpec] = [
         source_relative_path="Library/Safari/History.db",
         ingest=ingest.ingest_safari,
     ),
+    ArtifactSpec(
+        key="locations",
+        db_filename="RoutineDCache.sqlite",
+        source_domain="HomeDomain",
+        source_relative_path="Library/Caches/com.apple.routined/Cache.sqlite",
+        ingest=ingest.ingest_locations,
+    ),
 ]
 
 
