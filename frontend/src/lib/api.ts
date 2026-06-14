@@ -6,6 +6,7 @@ import type {
   MessageConversation,
   MessageItem,
   LocationPoint,
+  MapResponse,
   NoteRecord,
   PersonDetail,
   PersonSummary,
@@ -24,6 +25,8 @@ export type {
   CallRecord,
   ContactRecord,
   LocationPoint,
+  MapPoint,
+  MapResponse,
   MessageAttachment,
   MessageConversation,
   MessageItem,
@@ -323,6 +326,8 @@ export const api = {
     }),
   getTimeline: (backupId: string, token: string) =>
     request<{ items: TimelineEvent[] }>(`/backups/${backupId}/timeline`, 'GET', { token }),
+  getMap: (backupId: string, token: string) =>
+    request<MapResponse>(`/backups/${backupId}/map`, 'GET', { token }),
   listPeople: (backupId: string, token: string) =>
     request<{ items: PersonSummary[] }>(`/backups/${backupId}/people`, 'GET', { token }),
   getPerson: (backupId: string, key: string, token: string) =>

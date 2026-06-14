@@ -139,7 +139,13 @@ async def test_full_pipeline_indexes_all_types(db, tmp_path):
         backup = await session.scalar(select(Backup).where(Backup.ios_identifier == "ALL-1"))
         calendar = await session.scalar(select(Calendar))
         contact = await session.scalar(select(Contact))
+        photos = (await session.scalars(select(PhotoAsset).order_by(PhotoAsset.asset_id))).all()
 
     assert backup is not None and backup.status == BackupStatus.INDEXED
     assert calendar is not None and calendar.name == "Home"
     assert contact is not None and contact.emails == ["ada@example.com"]
+
+    # The geotagged photo carries coordinates; the other (a video, no GPS) is null.
+    geo = {p.asset_id: (p.latitude, p.longitude) for p in photos}
+    assert geo["uuid-1"][0] == 47.1 and geo["uuid-1"][1] == 8.5
+    assert geo["uuid-2"] == (None, None)

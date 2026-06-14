@@ -145,6 +145,20 @@ export interface TimelineEvent {
   subtitle?: string | null;
 }
 
+export interface MapPoint {
+  kind: 'location' | 'photo';
+  latitude: number;
+  longitude: number;
+  label?: string | null;
+  timestamp?: string | null;
+}
+
+export interface MapResponse {
+  items: MapPoint[];
+  total: number;
+  capped: boolean;
+}
+
 export interface PersonSummary {
   key: string;
   kind: string;

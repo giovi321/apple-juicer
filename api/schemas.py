@@ -301,6 +301,20 @@ class PersonListResponse(BaseModel):
     items: list[PersonSummaryModel]
 
 
+class MapPointModel(BaseModel):
+    kind: str  # "location" | "photo"
+    latitude: float
+    longitude: float
+    label: Optional[str] = None
+    timestamp: Optional[datetime] = None
+
+
+class MapResponse(BaseModel):
+    items: list[MapPointModel]
+    total: int
+    capped: bool = False
+
+
 class PersonEventModel(BaseModel):
     timestamp: datetime
     artifact_type: str
