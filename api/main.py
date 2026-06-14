@@ -20,6 +20,7 @@ from api.routes import (
     backups,
     report,
     search,
+    timeline,
 )
 from core.config import get_settings
 
@@ -83,6 +84,7 @@ def create_app() -> FastAPI:
     app.include_router(artifacts_voicemail.router)
     app.include_router(report.router)
     app.include_router(search.router)
+    app.include_router(timeline.router)
 
     return app
 

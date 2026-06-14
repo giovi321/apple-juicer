@@ -268,3 +268,14 @@ class SearchResultModel(BaseModel):
 class SearchResponse(BaseModel):
     query: str
     items: list[SearchResultModel]
+
+
+class TimelineEventModel(BaseModel):
+    timestamp: datetime
+    artifact_type: str
+    title: Optional[str] = None
+    subtitle: Optional[str] = None
+
+
+class TimelineResponse(BaseModel):
+    items: list[TimelineEventModel]

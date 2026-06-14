@@ -12,6 +12,7 @@ from . import (
     backups,
     report,
     search,
+    timeline,
 )
 
 __all__ = [
@@ -28,4 +29,5 @@ __all__ = [
     "backups",
     "report",
     "search",
+    "timeline",
 ]
