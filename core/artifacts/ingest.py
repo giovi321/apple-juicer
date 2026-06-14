@@ -23,6 +23,7 @@ from core.db.artifacts import (
     Contact,
     Message,
     MessageAttachment,
+    LocationPoint,
     MessageConversation,
     Note,
     PhotoAsset,
@@ -35,6 +36,7 @@ from core.db.models import Backup
 from parsers import calendar as calendar_parser
 from parsers import callhistory as callhistory_parser
 from parsers import contacts as contacts_parser
+from parsers import locations as locations_parser
 from parsers import messages as messages_parser
 from parsers import notes as notes_parser
 from parsers import photos as photos_parser
@@ -73,6 +75,7 @@ async def truncate_artifacts(session: AsyncSession, backup: Backup) -> None:
         Contact,
         CallRecord,
         SafariVisit,
+        LocationPoint,
         ArtifactSearchIndex,
     ]
     for table in tables_with_backup_id:
@@ -557,6 +560,30 @@ async def ingest_safari(session: AsyncSession, backup: Backup, db_path: Path | N
             for visit in visits
         ],
     )
+    backup.indexing_progress = (backup.indexing_progress or 0) + 1
+    await session.flush()
+
+
+async def ingest_locations(session: AsyncSession, backup: Backup, db_path: Path | None) -> None:
+    if not db_path or not str(db_path).strip() or not db_path.exists():
+        return
+    backup.indexing_artifact = "locations"
+    await session.flush()
+    points = locations_parser.parse_locations(db_path)
+    rows = [
+        LocationPoint(
+            backup_id=backup.id,
+            location_identifier=point.identifier,
+            latitude=point.latitude,
+            longitude=point.longitude,
+            altitude=point.altitude,
+            speed=point.speed,
+            horizontal_accuracy=point.horizontal_accuracy,
+            recorded_at=point.recorded_at,
+        )
+        for point in points
+    ]
+    session.add_all(rows)
     backup.indexing_progress = (backup.indexing_progress or 0) + 1
     await session.flush()
 

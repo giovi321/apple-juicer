@@ -141,6 +141,22 @@ def make_calls_db(path: Path) -> None:
     conn.close()
 
 
+def make_locations_db(path: Path) -> None:
+    conn = sqlite3.connect(path)
+    conn.executescript(
+        """
+        CREATE TABLE ZRTCLLOCATIONMOMENT (
+            Z_PK INTEGER PRIMARY KEY, ZLATITUDE REAL, ZLONGITUDE REAL, ZALTITUDE REAL,
+            ZSPEED REAL, ZHORIZONTALACCURACY REAL, ZTIMESTAMP REAL
+        );
+        INSERT INTO ZRTCLLOCATIONMOMENT VALUES (1, 47.3769, 8.5417, 408.0, 0.0, 10.0, 700000000.0);
+        INSERT INTO ZRTCLLOCATIONMOMENT VALUES (2, 37.3349, -122.0090, 25.0, 1.5, 5.0, 700100000.0);
+        """
+    )
+    conn.commit()
+    conn.close()
+
+
 def make_safari_db(path: Path) -> None:
     conn = sqlite3.connect(path)
     conn.executescript(
@@ -207,6 +223,7 @@ def build_all(decrypted_dir: Path) -> dict[str, str]:
         "contacts": decrypted_dir / "AddressBook.sqlitedb",
         "calls": decrypted_dir / "CallHistory.storedata",
         "safari": decrypted_dir / "History.db",
+        "locations": decrypted_dir / "RoutineDCache.sqlite",
     }
     make_photos_db(files["photos"])
     make_whatsapp_db(files["whatsapp"])
@@ -216,4 +233,5 @@ def build_all(decrypted_dir: Path) -> dict[str, str]:
     make_contacts_db(files["contacts"])
     make_calls_db(files["calls"])
     make_safari_db(files["safari"])
+    make_locations_db(files["locations"])
     return {key: str(value) for key, value in files.items()}

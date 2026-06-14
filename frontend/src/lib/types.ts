@@ -119,6 +119,16 @@ export interface SafariVisit {
   visit_count?: number | null;
 }
 
+export interface LocationPoint {
+  location_identifier: string;
+  latitude?: number | null;
+  longitude?: number | null;
+  altitude?: number | null;
+  speed?: number | null;
+  horizontal_accuracy?: number | null;
+  recorded_at?: string | null;
+}
+
 export interface MessageConversation {
   conversation_guid: string;
   service: string | null;
@@ -157,4 +167,5 @@ export type ArtifactView =
   | 'contacts'
   | 'calls'
   | 'safari'
+  | 'locations'
   | 'search';
