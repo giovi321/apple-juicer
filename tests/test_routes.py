@@ -40,15 +40,31 @@ EXPECTED_BACKUP_ROUTES = {
 }
 
 
+def _iter_routes(routes):
+    """Yield every (methods, path) pair, recursing into included routers.
+
+    FastAPI 0.137 stopped flattening ``include_router`` calls into
+    ``app.routes`` and instead inserts an ``_IncludedRouter`` wrapper that
+    exposes the original ``APIRouter`` via ``original_router``. Recursing
+    through it keeps this snapshot working on both the old and new layouts.
+    """
+    for route in routes:
+        methods = getattr(route, "methods", None)
+        path = getattr(route, "path", "")
+        if methods and path:
+            yield methods, path
+        original = getattr(route, "original_router", None)
+        if original is not None:
+            yield from _iter_routes(getattr(original, "routes", []))
+
+
 def _backup_routes() -> set[tuple[str, str]]:
     from api.main import create_app
 
     app = create_app()
     routes: set[tuple[str, str]] = set()
-    for route in app.routes:
-        methods = getattr(route, "methods", None)
-        path = getattr(route, "path", "")
-        if not methods or not path.startswith("/backups"):
+    for methods, path in _iter_routes(app.routes):
+        if not path.startswith("/backups"):
             continue
         for method in methods:
             if method in ("HEAD", "OPTIONS"):
