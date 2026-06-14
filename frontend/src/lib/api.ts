@@ -288,8 +288,16 @@ export const api = {
     }
     return response;
   },
-  downloadPhotoFile: async (backupId: string, relativePath: string, token: string, sessionToken?: string) => {
-    const urlString = apiUrl(`/backups/${backupId}/artifacts/photos/file`, { relative_path: relativePath });
+  downloadPhotoFile: async (
+    backupId: string,
+    relativePath: string,
+    token: string,
+    sessionToken?: string,
+    thumb?: number,
+  ) => {
+    const query: Record<string, string | number> = { relative_path: relativePath };
+    if (thumb) query.thumb = thumb;
+    const urlString = apiUrl(`/backups/${backupId}/artifacts/photos/file`, query);
     const response = await fetch(urlString, {
       method: 'GET',
       headers: {

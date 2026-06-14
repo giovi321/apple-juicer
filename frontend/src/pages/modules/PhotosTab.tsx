@@ -34,7 +34,7 @@ function LazyThumbnail({
         if (!entries[0].isIntersecting) return;
         observer.disconnect();
         api
-          .downloadPhotoFile(backupId, relativePath, apiToken, sessionToken)
+          .downloadPhotoFile(backupId, relativePath, apiToken, sessionToken, 240)
           .then((r) => r.blob())
           .then((b) => {
             if (!cancelled) setUrl(URL.createObjectURL(b));
@@ -157,7 +157,8 @@ export function PhotosTab({
   if (error && !items.length) return <div className="error-message">{error}</div>;
   if (!items.length) return <div className="no-results">No photos found in this backup.</div>;
 
-  const gridItems = items.filter((p) => p.relative_path);
+  // The grid renders downscaled thumbnails, which only exist for still images.
+  const gridItems = items.filter((p) => p.relative_path && p.media_type !== 'video');
 
   return (
     <div className="artifact-tab">
