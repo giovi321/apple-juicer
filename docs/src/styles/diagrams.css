@@ -1,0 +1,112 @@
+/* Diagram frame (inline dark-scheme SVGs).
+   The SVGs paint their own dark background, so the frame is dark in both the
+   light and dark site themes — a dark diagram always sits on a dark backdrop. */
+.diagram-frame {
+  position: relative;
+  background: #1c1917;
+  border: 1px solid rgba(231, 229, 228, 0.14);
+  border-radius: 8px;
+  padding: 1rem;
+  margin: 1.5rem 0;
+  overflow: hidden;
+  cursor: zoom-in;
+  transition: border-color 0.15s ease;
+}
+
+.diagram-frame:hover {
+  border-color: rgba(245, 158, 11, 0.55);
+}
+
+.diagram-frame::after {
+  content: "⤢";
+  position: absolute;
+  top: 0.4rem;
+  right: 0.6rem;
+  font-size: 14px;
+  line-height: 1;
+  color: rgba(231, 229, 228, 0.45);
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+
+.diagram-frame:hover::after {
+  opacity: 1;
+}
+
+.diagram-frame svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-width: 100%;
+}
+
+/* Lightbox overlay */
+.diagram-lightbox {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem;
+  background: rgba(8, 7, 6, 0.97);
+  cursor: zoom-out;
+  animation: diagram-fade 0.15s ease;
+}
+
+.diagram-lightbox-content {
+  position: relative;
+  width: min(94vw, 1600px);
+  max-height: 92vh;
+  background: #1c1917;
+  border: 1px solid rgba(231, 229, 228, 0.14);
+  border-radius: 8px;
+  padding: 1.5rem;
+  overflow: auto;
+  cursor: default;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.diagram-lightbox-content svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-height: calc(92vh - 3rem);
+}
+
+.diagram-lightbox-close {
+  position: fixed;
+  top: 1rem;
+  right: 1rem;
+  width: 2.5rem;
+  height: 2.5rem;
+  border-radius: 50%;
+  background: #292524;
+  border: 1px solid rgba(231, 229, 228, 0.2);
+  color: #e7e5e4;
+  font-size: 1.1rem;
+  font-family: inherit;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+  z-index: 1;
+}
+
+.diagram-lightbox-close:hover {
+  background: #3a3531;
+}
+
+@keyframes diagram-fade {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+body.diagram-lightbox-open {
+  overflow: hidden;
+}
