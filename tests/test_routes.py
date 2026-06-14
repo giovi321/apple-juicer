@@ -26,6 +26,7 @@ EXPECTED_BACKUP_ROUTES = {
     ("GET", "/backups/{backup_id}/artifacts/messages/attachment"),
     ("POST", "/backups/{backup_id}/extract/messages/{conversation_guid}"),
     ("GET", "/backups/{backup_id}/artifacts/photos"),
+    ("GET", "/backups/{backup_id}/artifacts/photos/file"),
     ("GET", "/backups/{backup_id}/artifacts/notes"),
     ("GET", "/backups/{backup_id}/artifacts/calendar/events"),
     ("GET", "/backups/{backup_id}/artifacts/contacts"),
