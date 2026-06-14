@@ -144,6 +144,26 @@ export interface TimelineEvent {
   subtitle?: string | null;
 }
 
+export interface PersonSummary {
+  key: string;
+  kind: string;
+  display_name: string;
+  is_contact: boolean;
+  identifiers: string[];
+  whatsapp_count: number;
+  message_count: number;
+  call_count: number;
+  voicemail_count: number;
+  total_events: number;
+  last_activity_at?: string | null;
+}
+
+export interface PersonDetail {
+  person: PersonSummary;
+  contact: ContactRecord | null;
+  events: TimelineEvent[];
+}
+
 export interface MessageConversation {
   conversation_guid: string;
   service: string | null;

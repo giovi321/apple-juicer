@@ -142,6 +142,20 @@ A merged, reverse-chronological view across nine timestamped artifact types (Wha
 | `limit` | query | int | `200` | Page size, applied after the global merge. |
 | `offset` | query | int | `0` | Pagination offset. |
 
+## People
+
+Contact-centric correlation over the communication artifacts. Each record's counterparty identifier (WhatsApp JID, iMessage handle, dialled number, voicemail sender) is normalized to one key, so a person's activity groups across artifacts. Both routes require a `DECRYPTED` backup.
+
+### `GET /backups/{backup_id}/people`
+
+Returns a `PersonListResponse` (`{ items: [PersonSummaryModel] }`), most recent first. Each summary carries the resolved `display_name`, an `is_contact` flag, the raw `identifiers` seen, and per-type counts (`whatsapp_count`, `message_count`, `call_count`, `voicemail_count`, `total_events`).
+
+### `GET /backups/{backup_id}/people/{key}`
+
+The key is the normalized `kind:value` form from the list (e.g. `phone:5550001111`). Returns a `PersonDetailResponse` (`{ person, contact, events }`): the person summary, the matching `ContactModel` if one exists, and the merged `TimelineEventModel` events for that person, newest first. `404` if the key has no correlated activity.
+
+Scope: events are counterparty-authored — incoming WhatsApp/iMessage messages plus the full call and voicemail log. Full bidirectional threads are a later enhancement.
+
 ## Report
 
 ### `GET /backups/{backup_id}/report.pdf`

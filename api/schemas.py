@@ -279,3 +279,27 @@ class TimelineEventModel(BaseModel):
 
 class TimelineResponse(BaseModel):
     items: list[TimelineEventModel]
+
+
+class PersonSummaryModel(BaseModel):
+    key: str
+    kind: str
+    display_name: str
+    is_contact: bool = False
+    identifiers: list[str] = []
+    whatsapp_count: int = 0
+    message_count: int = 0
+    call_count: int = 0
+    voicemail_count: int = 0
+    total_events: int = 0
+    last_activity_at: Optional[datetime] = None
+
+
+class PersonListResponse(BaseModel):
+    items: list[PersonSummaryModel]
+
+
+class PersonDetailResponse(BaseModel):
+    person: PersonSummaryModel
+    contact: Optional[ContactModel] = None
+    events: list[TimelineEventModel]
