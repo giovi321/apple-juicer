@@ -442,6 +442,23 @@ export function Explorer({ apiToken, backup, sessionToken, onSessionToken }: Exp
     }
   };
 
+  const handleDownloadReport = async () => {
+    try {
+      const response = await api.downloadReport(backup.id, apiToken);
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `report-${backup.id}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Report failed');
+    }
+  };
+
   const handleDownloadAttachment = async (relativePath: string, filename: string) => {
     try {
       const response = await api.downloadWhatsAppAttachment(backup.id, relativePath, apiToken, sessionToken);
@@ -629,6 +646,9 @@ export function Explorer({ apiToken, backup, sessionToken, onSessionToken }: Exp
             <h2>{backup.display_name}</h2>
             {backup.device_name && <span className="device-name">{backup.device_name}</span>}
             {backup.product_version && <span className="product-version">{backup.product_version}</span>}
+            <button className="download-btn" onClick={handleDownloadReport} style={{ marginLeft: 'auto' }}>
+              PDF report
+            </button>
           </div>
           <div className="backup-metadata">
             <div className="metadata-item">

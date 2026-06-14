@@ -277,6 +277,15 @@ export const api = {
     request<{ items: Voicemail[] }>(`/backups/${backupId}/artifacts/voicemail`, 'GET', {
       token,
     }),
+  downloadReport: async (backupId: string, token: string) => {
+    const urlString = apiUrl(`/backups/${backupId}/report.pdf`);
+    const response = await fetch(urlString, { method: 'GET', headers: { 'X-API-Token': token } });
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(errorText || `Report failed (${response.status})`);
+    }
+    return response;
+  },
   downloadPhotoFile: async (backupId: string, relativePath: string, token: string, sessionToken?: string) => {
     const urlString = apiUrl(`/backups/${backupId}/artifacts/photos/file`, { relative_path: relativePath });
     const response = await fetch(urlString, {
