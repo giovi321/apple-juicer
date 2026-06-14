@@ -10,6 +10,7 @@ from . import (
     artifacts_voicemail,
     artifacts_whatsapp,
     backups,
+    report,
     search,
 )
 
@@ -25,5 +26,6 @@ __all__ = [
     "artifacts_voicemail",
     "artifacts_whatsapp",
     "backups",
+    "report",
     "search",
 ]
