@@ -129,6 +129,14 @@ export interface LocationPoint {
   recorded_at?: string | null;
 }
 
+export interface Voicemail {
+  voicemail_identifier: string;
+  sender?: string | null;
+  received_at?: string | null;
+  duration_seconds?: number | null;
+  trashed: boolean;
+}
+
 export interface MessageConversation {
   conversation_guid: string;
   service: string | null;
@@ -168,4 +176,5 @@ export type ArtifactView =
   | 'calls'
   | 'safari'
   | 'locations'
+  | 'voicemail'
   | 'search';

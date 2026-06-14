@@ -11,6 +11,7 @@ const TYPE_META: Record<string, { label: string; icon: string }> = {
   contact: { label: 'Contact', icon: '👤' },
   call: { label: 'Call', icon: '📞' },
   safari: { label: 'Safari', icon: '🌐' },
+  voicemail: { label: 'Voicemail', icon: '📭' },
 };
 
 export function SearchTab({ apiToken, backupId }: { apiToken: string; backupId: string }) {

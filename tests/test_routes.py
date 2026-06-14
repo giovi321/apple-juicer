@@ -33,6 +33,7 @@ EXPECTED_BACKUP_ROUTES = {
     ("GET", "/backups/{backup_id}/artifacts/calls"),
     ("GET", "/backups/{backup_id}/artifacts/safari"),
     ("GET", "/backups/{backup_id}/artifacts/locations"),
+    ("GET", "/backups/{backup_id}/artifacts/voicemail"),
     ("GET", "/backups/{backup_id}/search"),
 }
 

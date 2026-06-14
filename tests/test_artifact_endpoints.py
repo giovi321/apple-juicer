@@ -34,6 +34,7 @@ async def test_artifact_endpoints_return_indexed_rows(db, tmp_path):
         artifacts_notes,
         artifacts_photos,
         artifacts_safari,
+        artifacts_voicemail,
     )
 
     decrypted = tmp_path / "decrypted"
@@ -64,6 +65,7 @@ async def test_artifact_endpoints_return_indexed_rows(db, tmp_path):
         calls = await artifacts_calls.list_calls(backup_id, registry=registry, session=session)
         safari = await artifacts_safari.list_safari_history(backup_id, registry=registry, session=session)
         locations = await artifacts_locations.list_locations(backup_id, registry=registry, session=session)
+        voicemail = await artifacts_voicemail.list_voicemail(backup_id, registry=registry, session=session)
 
     assert {p.media_type for p in photos.items} == {"photo", "video"}
     assert len(notes.items) == 2
@@ -80,6 +82,8 @@ async def test_artifact_endpoints_return_indexed_rows(db, tmp_path):
     assert any(v.url == "https://apple.com" for v in safari.items)
     assert len(locations.items) == 2
     assert any(abs((loc.latitude or 0) - 47.3769) < 0.001 for loc in locations.items)
+    assert len(voicemail.items) == 2
+    assert any(vm.trashed for vm in voicemail.items)
 
 
 async def test_endpoints_reject_undecrypted_backup(db, tmp_path):

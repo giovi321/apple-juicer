@@ -9,6 +9,7 @@ import type {
   NoteRecord,
   PhotoAsset,
   SafariVisit,
+  Voicemail,
   WhatsAppChat,
   WhatsAppMessage,
 } from './types.ts';
@@ -26,6 +27,7 @@ export type {
   NoteRecord,
   PhotoAsset,
   SafariVisit,
+  Voicemail,
   WhatsAppAttachment,
   WhatsAppChat,
   WhatsAppMessage,
@@ -269,6 +271,10 @@ export const api = {
     }),
   listLocations: (backupId: string, token: string) =>
     request<{ items: LocationPoint[] }>(`/backups/${backupId}/artifacts/locations`, 'GET', {
+      token,
+    }),
+  listVoicemail: (backupId: string, token: string) =>
+    request<{ items: Voicemail[] }>(`/backups/${backupId}/artifacts/voicemail`, 'GET', {
       token,
     }),
   downloadPhotoFile: async (backupId: string, relativePath: string, token: string, sessionToken?: string) => {

@@ -220,6 +220,18 @@ class LocationPoint(Base):
     recorded_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), index=True)
 
 
+class Voicemail(Base):
+    __tablename__ = "voicemails"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    backup_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("backups.id", ondelete="CASCADE"), index=True)
+    voicemail_identifier: Mapped[str] = mapped_column(String(255), index=True)
+    sender: Mapped[str | None] = mapped_column(String(255))
+    received_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), index=True)
+    duration_seconds: Mapped[int | None]
+    trashed: Mapped[bool] = mapped_column(Boolean, default=False)
+
+
 class SafariVisit(Base):
     __tablename__ = "safari_visits"
 

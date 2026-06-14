@@ -157,6 +157,22 @@ def make_locations_db(path: Path) -> None:
     conn.close()
 
 
+def make_voicemail_db(path: Path) -> None:
+    conn = sqlite3.connect(path)
+    conn.executescript(
+        """
+        CREATE TABLE voicemail (
+            ROWID INTEGER PRIMARY KEY, sender TEXT, callback_num TEXT, date INTEGER,
+            duration INTEGER, trashed_date INTEGER, flags INTEGER
+        );
+        INSERT INTO voicemail VALUES (1, '+15550001111', '+15550001111', 1600000000, 23, 0, 0);
+        INSERT INTO voicemail VALUES (2, '+15550002222', '+15550002222', 1600100000, 8, 1600200000, 0);
+        """
+    )
+    conn.commit()
+    conn.close()
+
+
 def make_safari_db(path: Path) -> None:
     conn = sqlite3.connect(path)
     conn.executescript(
@@ -224,6 +240,7 @@ def build_all(decrypted_dir: Path) -> dict[str, str]:
         "calls": decrypted_dir / "CallHistory.storedata",
         "safari": decrypted_dir / "History.db",
         "locations": decrypted_dir / "RoutineDCache.sqlite",
+        "voicemail": decrypted_dir / "voicemail.db",
     }
     make_photos_db(files["photos"])
     make_whatsapp_db(files["whatsapp"])
@@ -234,4 +251,5 @@ def build_all(decrypted_dir: Path) -> dict[str, str]:
     make_calls_db(files["calls"])
     make_safari_db(files["safari"])
     make_locations_db(files["locations"])
+    make_voicemail_db(files["voicemail"])
     return {key: str(value) for key, value in files.items()}
