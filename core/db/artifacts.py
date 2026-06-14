@@ -206,6 +206,18 @@ class Contact(Base):
     avatar_file_id: Mapped[str | None] = mapped_column(String(128))
 
 
+class SafariVisit(Base):
+    __tablename__ = "safari_visits"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    backup_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("backups.id", ondelete="CASCADE"), index=True)
+    visit_identifier: Mapped[str] = mapped_column(String(255), index=True)
+    url: Mapped[str | None] = mapped_column(Text)
+    title: Mapped[str | None] = mapped_column(String(1024))
+    visited_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), index=True)
+    visit_count: Mapped[int | None]
+
+
 class CallRecord(Base):
     __tablename__ = "call_records"
 

@@ -10,6 +10,7 @@ const TYPE_META: Record<string, { label: string; icon: string }> = {
   calendar_event: { label: 'Event', icon: '🗓' },
   contact: { label: 'Contact', icon: '👤' },
   call: { label: 'Call', icon: '📞' },
+  safari: { label: 'Safari', icon: '🌐' },
 };
 
 export function SearchTab({ apiToken, backupId }: { apiToken: string; backupId: string }) {

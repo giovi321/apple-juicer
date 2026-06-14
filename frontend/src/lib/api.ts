@@ -7,6 +7,7 @@ import type {
   MessageItem,
   NoteRecord,
   PhotoAsset,
+  SafariVisit,
   WhatsAppChat,
   WhatsAppMessage,
 } from './types.ts';
@@ -22,6 +23,7 @@ export type {
   MessageItem,
   NoteRecord,
   PhotoAsset,
+  SafariVisit,
   WhatsAppAttachment,
   WhatsAppChat,
   WhatsAppMessage,
@@ -257,6 +259,10 @@ export const api = {
     }),
   listCalls: (backupId: string, token: string) =>
     request<{ items: CallRecord[] }>(`/backups/${backupId}/artifacts/calls`, 'GET', {
+      token,
+    }),
+  listSafari: (backupId: string, token: string) =>
+    request<{ items: SafariVisit[] }>(`/backups/${backupId}/artifacts/safari`, 'GET', {
       token,
     }),
   search: (backupId: string, query: string, token: string) =>

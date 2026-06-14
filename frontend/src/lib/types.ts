@@ -111,6 +111,14 @@ export interface CallRecord {
   service?: string | null;
 }
 
+export interface SafariVisit {
+  visit_identifier: string;
+  url: string | null;
+  title: string | null;
+  visited_at?: string | null;
+  visit_count?: number | null;
+}
+
 export interface MessageConversation {
   conversation_guid: string;
   service: string | null;
@@ -148,4 +156,5 @@ export type ArtifactView =
   | 'calendar'
   | 'contacts'
   | 'calls'
+  | 'safari'
   | 'search';

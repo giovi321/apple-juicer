@@ -15,6 +15,7 @@ import { NotesTab } from './modules/NotesTab';
 import { CalendarTab } from './modules/CalendarTab';
 import { ContactsTab } from './modules/ContactsTab';
 import { CallsTab } from './modules/CallsTab';
+import { SafariTab } from './modules/SafariTab';
 import { SearchTab } from './modules/SearchTab';
 import '../styles/Explorer.css';
 
@@ -34,6 +35,7 @@ type ModuleView =
   | 'calendar'
   | 'contacts'
   | 'calls'
+  | 'safari'
   | 'search';
 
 const MODULES: { id: ModuleView; label: string; description: string }[] = [
@@ -46,6 +48,7 @@ const MODULES: { id: ModuleView; label: string; description: string }[] = [
   { id: 'calendar', label: 'Calendar', description: 'Calendar events' },
   { id: 'contacts', label: 'Contacts', description: 'Address book entries' },
   { id: 'calls', label: 'Calls', description: 'Call history' },
+  { id: 'safari', label: 'Safari', description: 'Browsing history' },
 ];
 
 export function Explorer({ apiToken, backup, sessionToken, onSessionToken }: ExplorerProps) {
@@ -1671,6 +1674,8 @@ export function Explorer({ apiToken, backup, sessionToken, onSessionToken }: Exp
         {activeModule === 'contacts' && <ContactsTab apiToken={apiToken} backupId={backup.id} />}
 
         {activeModule === 'calls' && <CallsTab apiToken={apiToken} backupId={backup.id} />}
+
+        {activeModule === 'safari' && <SafariTab apiToken={apiToken} backupId={backup.id} />}
 
         {activeModule === 'search' && <SearchTab apiToken={apiToken} backupId={backup.id} />}
       </div>
