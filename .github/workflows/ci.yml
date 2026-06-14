@@ -48,3 +48,6 @@ jobs:
 
       - name: Build (tsc + vite)
         run: npm run build
+
+      - name: Test (vitest)
+        run: npm test
