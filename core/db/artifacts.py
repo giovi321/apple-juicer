@@ -39,6 +39,8 @@ class PhotoAsset(Base, MetadataJSONMixin):
     width: Mapped[int | None]
     height: Mapped[int | None]
     media_type: Mapped[str | None] = mapped_column(String(64))
+    latitude: Mapped[float | None] = mapped_column(Float)
+    longitude: Mapped[float | None] = mapped_column(Float)
 
     __table_args__ = (
         Index("ix_photo_assets_backup_asset", "backup_id", "asset_id", unique=True),

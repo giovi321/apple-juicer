@@ -11,6 +11,7 @@ from api.routes import (
     artifacts_calls,
     artifacts_contacts,
     artifacts_locations,
+    artifacts_map,
     artifacts_messages,
     artifacts_notes,
     artifacts_photos,
@@ -82,6 +83,7 @@ def create_app() -> FastAPI:
     app.include_router(artifacts_calls.router)
     app.include_router(artifacts_safari.router)
     app.include_router(artifacts_locations.router)
+    app.include_router(artifacts_map.router)
     app.include_router(artifacts_voicemail.router)
     app.include_router(people.router)
     app.include_router(report.router)

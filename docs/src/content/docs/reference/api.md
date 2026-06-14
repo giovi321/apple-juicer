@@ -142,6 +142,12 @@ A merged, reverse-chronological view across nine timestamped artifact types (Wha
 | `limit` | query | int | `200` | Page size, applied after the global merge. |
 | `offset` | query | int | `0` | Pagination offset. |
 
+## Map
+
+### `GET /backups/{backup_id}/map`
+
+Returns a `MapResponse` (`{ items: [MapPointModel], total, capped }`) — significant locations and geotagged photos unioned into one flat list of `{ kind: "location" | "photo", latitude, longitude, label, timestamp }`. Both sources are filtered to rows that actually carry coordinates; for photos that means latitude/longitude presence, not media type, so geotagged videos are included. Requires a `DECRYPTED` backup. The list is capped at 5000 points (`capped` flags when the cap is hit).
+
 ## People
 
 Contact-centric correlation over the communication artifacts. Each record's counterparty identifier (WhatsApp JID, iMessage handle, dialled number, voicemail sender) is normalized to one key, so a person's activity groups across artifacts. Both routes require a `DECRYPTED` backup.

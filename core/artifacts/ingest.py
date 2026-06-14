@@ -113,6 +113,8 @@ async def ingest_photos(session: AsyncSession, backup: Backup, db_path: Path | N
                 height=asset.height,
                 media_type=asset.media_type,
                 metadata=asset.metadata,
+                latitude=asset.latitude,
+                longitude=asset.longitude,
             )
             for asset in chunk
         ]

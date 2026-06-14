@@ -20,6 +20,8 @@ class PhotoAssetRecord:
     height: int | None
     media_type: str | None
     metadata: dict[str, Any] | None = None
+    latitude: float | None = None
+    longitude: float | None = None
 
 
 def parse_photos(db_path: Path) -> List[PhotoAssetRecord]:
@@ -67,6 +69,12 @@ def parse_photos(db_path: Path) -> List[PhotoAssetRecord]:
                 )
                 if key in data
             }
+            latitude = _coord(data.get("ZLATITUDE"), 90.0)
+            longitude = _coord(data.get("ZLONGITUDE"), 180.0)
+            # iOS writes -180 (or another out-of-range value) to both axes when an
+            # asset has no GPS fix; only keep a point when BOTH axes are valid.
+            if latitude is None or longitude is None:
+                latitude = longitude = None
 
             results.append(
                 PhotoAssetRecord(
@@ -80,9 +88,23 @@ def parse_photos(db_path: Path) -> List[PhotoAssetRecord]:
                     height=int(height) if height is not None else None,
                     media_type=media_type,
                     metadata=metadata,
+                    latitude=latitude,
+                    longitude=longitude,
                 )
             )
     return results
+
+
+def _coord(value: Any, limit: float) -> float | None:
+    """A coordinate within ±limit (90 for latitude, 180 for longitude), or None
+    for missing/unparseable/out-of-range values."""
+    if value is None:
+        return None
+    try:
+        coord = float(value)
+    except (TypeError, ValueError):
+        return None
+    return coord if -limit <= coord <= limit else None
 
 
 def _media_type_from_kind(kind_value: Any) -> str | None:
