@@ -1,10 +1,70 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { api, type PhotoAsset } from '../../lib/api';
 import { downloadCsv } from '../../lib/csv';
 import '../../styles/ArtifactTabs.css';
 
 function fileName(p: PhotoAsset): string {
   return p.original_filename || p.relative_path?.split('/').pop() || 'photo';
+}
+
+/** A grid cell that fetches its image only once it scrolls into view. */
+function LazyThumbnail({
+  apiToken,
+  backupId,
+  sessionToken,
+  relativePath,
+  onOpen,
+}: {
+  apiToken: string;
+  backupId: string;
+  sessionToken?: string;
+  relativePath: string;
+  onOpen: () => void;
+}) {
+  const ref = useRef<HTMLDivElement | null>(null);
+  const [url, setUrl] = useState<string | null>(null);
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    let cancelled = false;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (!entries[0].isIntersecting) return;
+        observer.disconnect();
+        api
+          .downloadPhotoFile(backupId, relativePath, apiToken, sessionToken)
+          .then((r) => r.blob())
+          .then((b) => {
+            if (!cancelled) setUrl(URL.createObjectURL(b));
+          })
+          .catch(() => {
+            if (!cancelled) setFailed(true);
+          });
+      },
+      { rootMargin: '300px' },
+    );
+    observer.observe(el);
+    return () => {
+      cancelled = true;
+      observer.disconnect();
+    };
+  }, [apiToken, backupId, relativePath, sessionToken]);
+
+  useEffect(() => () => {
+    if (url) URL.revokeObjectURL(url);
+  }, [url]);
+
+  return (
+    <div ref={ref} className="photo-thumb" onClick={() => url && onOpen()} title={relativePath}>
+      {url ? (
+        <img src={url} alt="" loading="lazy" />
+      ) : (
+        <div className="photo-thumb-placeholder">{failed ? '⚠' : '…'}</div>
+      )}
+    </div>
+  );
 }
 
 export function PhotosTab({
@@ -21,6 +81,7 @@ export function PhotosTab({
   const [error, setError] = useState<string | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [view, setView] = useState<'table' | 'grid'>('table');
 
   useEffect(() => {
     let mounted = true;
@@ -96,10 +157,28 @@ export function PhotosTab({
   if (error && !items.length) return <div className="error-message">{error}</div>;
   if (!items.length) return <div className="no-results">No photos found in this backup.</div>;
 
+  const gridItems = items.filter((p) => p.relative_path);
+
   return (
     <div className="artifact-tab">
       <div className="artifact-toolbar">
         <span className="artifact-count">{items.length} photos</span>
+        {sessionToken && (
+          <span className="view-toggle">
+            <button
+              className={`download-btn ${view === 'table' ? '' : 'extracted'}`}
+              onClick={() => setView('table')}
+            >
+              Table
+            </button>
+            <button
+              className={`download-btn ${view === 'grid' ? '' : 'extracted'}`}
+              onClick={() => setView('grid')}
+            >
+              Grid
+            </button>
+          </span>
+        )}
         <button className="download-btn" onClick={exportCsv}>
           Download CSV
         </button>
@@ -109,46 +188,62 @@ export function PhotosTab({
       {!sessionToken && (
         <div className="error-message">Unlock the backup (Attachments) to view or download the actual images.</div>
       )}
-      <div className="artifact-scroll">
-        <table className="artifact-table">
-          <thead>
-            <tr>
-              <th>Filename</th>
-              <th>Taken</th>
-              <th>Type</th>
-              <th>Dimensions</th>
-              <th>Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {items.map((p, i) => {
-              const rp = p.relative_path;
-              return (
-                <tr key={p.asset_id ?? p.file_id ?? `${p.original_filename}-${i}`}>
-                  <td>{fileName(p)}</td>
-                  <td>{p.taken_at ? new Date(p.taken_at).toLocaleString() : '—'}</td>
-                  <td>{p.media_type || '—'}</td>
-                  <td>{p.width && p.height ? `${p.width}×${p.height}` : '—'}</td>
-                  <td>
-                    {rp && sessionToken ? (
-                      <>
-                        <button className="download-btn" disabled={busy} onClick={() => viewPhoto(rp)}>
-                          View
-                        </button>{' '}
-                        <button className="download-btn" disabled={busy} onClick={() => savePhoto(rp, fileName(p))}>
-                          ⬇
-                        </button>
-                      </>
-                    ) : (
-                      '—'
-                    )}
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
+
+      {sessionToken && view === 'grid' ? (
+        <div className="photo-grid">
+          {gridItems.map((p, i) => (
+            <LazyThumbnail
+              key={p.asset_id ?? p.file_id ?? `${p.relative_path}-${i}`}
+              apiToken={apiToken}
+              backupId={backupId}
+              sessionToken={sessionToken}
+              relativePath={p.relative_path as string}
+              onOpen={() => viewPhoto(p.relative_path as string)}
+            />
+          ))}
+        </div>
+      ) : (
+        <div className="artifact-scroll">
+          <table className="artifact-table">
+            <thead>
+              <tr>
+                <th>Filename</th>
+                <th>Taken</th>
+                <th>Type</th>
+                <th>Dimensions</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {items.map((p, i) => {
+                const rp = p.relative_path;
+                return (
+                  <tr key={p.asset_id ?? p.file_id ?? `${p.original_filename}-${i}`}>
+                    <td>{fileName(p)}</td>
+                    <td>{p.taken_at ? new Date(p.taken_at).toLocaleString() : '—'}</td>
+                    <td>{p.media_type || '—'}</td>
+                    <td>{p.width && p.height ? `${p.width}×${p.height}` : '—'}</td>
+                    <td>
+                      {rp && sessionToken ? (
+                        <>
+                          <button className="download-btn" disabled={busy} onClick={() => viewPhoto(rp)}>
+                            View
+                          </button>{' '}
+                          <button className="download-btn" disabled={busy} onClick={() => savePhoto(rp, fileName(p))}>
+                            ⬇
+                          </button>
+                        </>
+                      ) : (
+                        '—'
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
 
       {preview && (
         <div className="image-preview-modal" onClick={closePreview}>
