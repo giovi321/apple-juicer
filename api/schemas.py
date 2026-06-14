@@ -220,6 +220,18 @@ class CallListResponse(BaseModel):
     items: list[CallModel]
 
 
+class SafariVisitModel(BaseModel):
+    visit_identifier: str
+    url: Optional[str] = None
+    title: Optional[str] = None
+    visited_at: Optional[datetime] = None
+    visit_count: Optional[int] = None
+
+
+class SafariVisitListResponse(BaseModel):
+    items: list[SafariVisitModel]
+
+
 class SearchResultModel(BaseModel):
     artifact_type: str
     artifact_ref: str

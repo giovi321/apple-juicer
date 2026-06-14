@@ -32,6 +32,7 @@ async def test_artifact_endpoints_return_indexed_rows(db, tmp_path):
         artifacts_contacts,
         artifacts_notes,
         artifacts_photos,
+        artifacts_safari,
     )
 
     decrypted = tmp_path / "decrypted"
@@ -60,6 +61,7 @@ async def test_artifact_endpoints_return_indexed_rows(db, tmp_path):
         events = await artifacts_calendar.list_calendar_events(backup_id, registry=registry, session=session)
         contacts = await artifacts_contacts.list_contacts(backup_id, registry=registry, session=session)
         calls = await artifacts_calls.list_calls(backup_id, registry=registry, session=session)
+        safari = await artifacts_safari.list_safari_history(backup_id, registry=registry, session=session)
 
     assert {p.media_type for p in photos.items} == {"photo", "video"}
     assert len(notes.items) == 2
@@ -72,6 +74,8 @@ async def test_artifact_endpoints_return_indexed_rows(db, tmp_path):
     assert len(calls.items) == 2
     assert {c.is_outgoing for c in calls.items} == {True, False}
     assert any(c.display_name == "Ada" for c in calls.items)
+    assert len(safari.items) == 3
+    assert any(v.url == "https://apple.com" for v in safari.items)
 
 
 async def test_endpoints_reject_undecrypted_backup(db, tmp_path):

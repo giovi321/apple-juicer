@@ -56,6 +56,13 @@ REGISTRY: list[ArtifactSpec] = [
         source_relative_path="Library/CallHistoryDB/CallHistory.storedata",
         ingest=ingest.ingest_calls,
     ),
+    ArtifactSpec(
+        key="safari",
+        db_filename="History.db",
+        source_domain="AppDomainGroup-group.com.apple.safari",
+        source_relative_path="Library/Safari/History.db",
+        ingest=ingest.ingest_safari,
+    ),
 ]
 
 

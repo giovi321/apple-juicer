@@ -26,6 +26,7 @@ from core.db.artifacts import (
     MessageConversation,
     Note,
     PhotoAsset,
+    SafariVisit,
     WhatsAppAttachment,
     WhatsAppChat,
     WhatsAppMessage,
@@ -37,6 +38,7 @@ from parsers import contacts as contacts_parser
 from parsers import messages as messages_parser
 from parsers import notes as notes_parser
 from parsers import photos as photos_parser
+from parsers import safari as safari_parser
 from parsers import whatsapp as whatsapp_parser
 
 
@@ -70,6 +72,7 @@ async def truncate_artifacts(session: AsyncSession, backup: Backup) -> None:
         Calendar,
         Contact,
         CallRecord,
+        SafariVisit,
         ArtifactSearchIndex,
     ]
     for table in tables_with_backup_id:
@@ -515,6 +518,43 @@ async def ingest_calls(session: AsyncSession, backup: Backup, db_path: Path | No
                 search_text=" ".join(filter(None, [call.name, call.address])),
             )
             for call in calls
+        ],
+    )
+    backup.indexing_progress = (backup.indexing_progress or 0) + 1
+    await session.flush()
+
+
+async def ingest_safari(session: AsyncSession, backup: Backup, db_path: Path | None) -> None:
+    if not db_path or not str(db_path).strip() or not db_path.exists():
+        return
+    backup.indexing_artifact = "safari"
+    await session.flush()
+    visits = safari_parser.parse_safari_history(db_path)
+    visit_rows = [
+        SafariVisit(
+            backup_id=backup.id,
+            visit_identifier=visit.identifier,
+            url=visit.url,
+            title=visit.title,
+            visited_at=visit.visited_at,
+            visit_count=visit.visit_count,
+        )
+        for visit in visits
+    ]
+    session.add_all(visit_rows)
+    await _add_search_rows(
+        session,
+        backup,
+        "safari",
+        [
+            ArtifactSearchIndex(
+                backup_id=backup.id,
+                artifact_type="safari",
+                artifact_ref=visit.identifier,
+                display_text=visit.title or visit.url,
+                search_text=" ".join(filter(None, [visit.title, visit.url])),
+            )
+            for visit in visits
         ],
     )
     backup.indexing_progress = (backup.indexing_progress or 0) + 1

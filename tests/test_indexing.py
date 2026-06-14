@@ -97,6 +97,7 @@ async def test_full_pipeline_indexes_all_types(db, tmp_path):
         MessageConversation,
         Note,
         PhotoAsset,
+        SafariVisit,
         WhatsAppAttachment,
         WhatsAppChat,
         WhatsAppMessage,
@@ -127,6 +128,7 @@ async def test_full_pipeline_indexes_all_types(db, tmp_path):
     assert await count(CalendarEvent) == 2
     assert await count(Contact) == 1
     assert await count(CallRecord) == 2
+    assert await count(SafariVisit) == 3
     assert await count(ArtifactSearchIndex) >= 2  # photos populate the search index
 
     async with async_session_factory() as session:

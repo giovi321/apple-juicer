@@ -141,6 +141,23 @@ def make_calls_db(path: Path) -> None:
     conn.close()
 
 
+def make_safari_db(path: Path) -> None:
+    conn = sqlite3.connect(path)
+    conn.executescript(
+        """
+        CREATE TABLE history_items (id INTEGER PRIMARY KEY, url TEXT, visit_count INTEGER);
+        CREATE TABLE history_visits (id INTEGER PRIMARY KEY, history_item INTEGER, title TEXT, visit_time REAL);
+        INSERT INTO history_items VALUES (1, 'https://example.com', 3);
+        INSERT INTO history_items VALUES (2, 'https://apple.com', 1);
+        INSERT INTO history_visits VALUES (1, 1, 'Example Domain', 700000000.0);
+        INSERT INTO history_visits VALUES (2, 1, 'Example Domain', 700050000.0);
+        INSERT INTO history_visits VALUES (3, 2, 'Apple', 700100000.0);
+        """
+    )
+    conn.commit()
+    conn.close()
+
+
 def make_messages_db(path: Path) -> None:
     conn = sqlite3.connect(path)
     conn.executescript(
@@ -189,6 +206,7 @@ def build_all(decrypted_dir: Path) -> dict[str, str]:
         "calendar": decrypted_dir / "Calendar.sqlite",
         "contacts": decrypted_dir / "AddressBook.sqlitedb",
         "calls": decrypted_dir / "CallHistory.storedata",
+        "safari": decrypted_dir / "History.db",
     }
     make_photos_db(files["photos"])
     make_whatsapp_db(files["whatsapp"])
@@ -197,4 +215,5 @@ def build_all(decrypted_dir: Path) -> dict[str, str]:
     make_calendar_db(files["calendar"])
     make_contacts_db(files["contacts"])
     make_calls_db(files["calls"])
+    make_safari_db(files["safari"])
     return {key: str(value) for key, value in files.items()}
