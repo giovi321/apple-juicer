@@ -29,6 +29,7 @@ export type {
   MessageItem,
   NoteRecord,
   PersonDetail,
+  PersonEvent,
   PersonSummary,
   PhotoAsset,
   SafariVisit,

@@ -1,14 +1,16 @@
 """Contact-centric correlation: group activity across artifacts by person.
 
-This is a read layer over the already-indexed communication artifacts. Each
-record's counterparty identifier (a WhatsApp JID, an iMessage handle, a dialled
-number, a voicemail sender) is normalized to a single key, so one person's
-messages, calls and voicemails collapse into a single view. Contacts supply the
-display name where one matches.
+A read layer over the indexed communication artifacts. Each person is keyed by a
+normalized identifier — a WhatsApp JID, an iMessage handle, a dialled number, and
+a voicemail sender all collapse to one key. For WhatsApp and iMessage the
+person's full 1:1 thread is returned in both directions (from-me replies
+included), so matching pivots on the thread container rather than the per-message
+sender, which is null on outgoing messages. Calls and voicemails are matched by
+their counterparty number. Contacts supply the display name.
 
-Scope note: events are counterparty-authored — incoming WhatsApp/iMessage
-messages plus the full call and voicemail log for that identifier. Full
-bidirectional threads are a later enhancement.
+Group chats are excluded from per-person threads — a person there is one of many
+participants — detected by WhatsApp participant count / `@g.us` guid and by
+iMessage handle count.
 """
 
 from __future__ import annotations
@@ -16,27 +18,28 @@ from __future__ import annotations
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api import schemas
 from api.dependencies import get_backup_registry, get_db_session
 from api.routes._common import get_backup_or_404, get_decrypted_backup
 from api.security import require_api_token
-from core.correlation import identity_key, normalize_identifier
+from core.correlation import identity_key
 from core.db.artifacts import (
     CallRecord,
     Contact,
     Message,
     MessageConversation,
     Voicemail,
+    WhatsAppChat,
     WhatsAppMessage,
 )
 from core.services import BackupRegistry
 
 router = APIRouter(prefix="/backups", tags=["people"], dependencies=[Depends(require_api_token)])
 
-# Per-table cap when gathering a person's events for the detail view.
+# Per-table / per-thread cap when gathering a person's events.
 _PER_TYPE = 2000
 
 
@@ -46,9 +49,27 @@ def _truncate(text: str | None, length: int = 90) -> str | None:
     return text if len(text) <= length else text[:length] + "…"
 
 
+def _later(a: datetime | None, b: datetime | None) -> datetime | None:
+    if a is None:
+        return b
+    if b is None:
+        return a
+    return a if a > b else b
+
+
 def _contact_name(contact: Contact) -> str:
     name = " ".join(p for p in (contact.first_name, contact.last_name) if p).strip()
     return name or contact.company or contact.contact_identifier
+
+
+def _is_one_to_one_chat(chat: WhatsAppChat) -> bool:
+    """A WhatsApp chat is 1:1 when it isn't a group: not a @g.us guid and at
+    most two participants. ``identity_key`` alone can't tell a group apart,
+    because a group JID still normalizes to a phone-like key."""
+    guid = chat.chat_guid or ""
+    if "g.us" in guid:  # group JID marker (e.g. ...@g.us)
+        return False
+    return chat.participant_count is None or chat.participant_count <= 2
 
 
 async def _contacts_by_key(session: AsyncSession, backup_id) -> dict[str, tuple[str, Contact]]:
@@ -64,145 +85,221 @@ async def _contacts_by_key(session: AsyncSession, backup_id) -> dict[str, tuple[
     return mapping
 
 
-async def _aggregate(
-    session: AsyncSession, backup_id, contacts: dict[str, tuple[str, Contact]]
-) -> dict[str, schemas.PersonSummaryModel]:
-    agg: dict[str, dict] = {}
+class _Person:
+    """Per-key accumulator while scanning a backup."""
 
-    def bump(raw: str | None, name: str | None, ts: datetime | None, field: str) -> None:
-        norm = normalize_identifier(raw)
-        if not norm:
-            return
-        key = f"{norm[0]}:{norm[1]}"
-        entry = agg.get(key)
-        if entry is None:
-            entry = agg[key] = {
-                "kind": norm[0],
-                "identifiers": [],
-                "names": [],
-                "whatsapp_count": 0,
-                "message_count": 0,
-                "call_count": 0,
-                "voicemail_count": 0,
-                "last_activity_at": None,
-            }
-        entry[field] += 1
-        if raw and raw not in entry["identifiers"]:
-            entry["identifiers"].append(raw)
-        if name and name not in entry["names"]:
-            entry["names"].append(name)
-        if ts and (entry["last_activity_at"] is None or ts > entry["last_activity_at"]):
-            entry["last_activity_at"] = ts
+    __slots__ = (
+        "key",
+        "kind",
+        "identifiers",
+        "names",
+        "whatsapp_count",
+        "message_count",
+        "call_count",
+        "voicemail_count",
+        "last_at",
+        "wa_chats",
+        "imsg_convs",
+    )
 
-    wa = (
-        await session.execute(
-            select(WhatsAppMessage.sender, WhatsAppMessage.sender_name, WhatsAppMessage.sent_at).where(
-                WhatsAppMessage.backup_id == backup_id,
-                WhatsAppMessage.is_from_me.is_(False),
-                WhatsAppMessage.sender.is_not(None),
+    def __init__(self, key: str) -> None:
+        self.key = key
+        self.kind = key.split(":", 1)[0]
+        self.identifiers: list[str] = []
+        self.names: list[str] = []
+        self.whatsapp_count = 0
+        self.message_count = 0
+        self.call_count = 0
+        self.voicemail_count = 0
+        self.last_at: datetime | None = None
+        self.wa_chats: list[tuple] = []  # (chat_id, chat_guid)
+        self.imsg_convs: list[tuple] = []  # (conversation_id, conversation_guid)
+
+    def note_identifier(self, raw: str | None) -> None:
+        if raw and raw not in self.identifiers:
+            self.identifiers.append(raw)
+
+    def note_name(self, name: str | None) -> None:
+        if name and name not in self.names:
+            self.names.append(name)
+
+
+async def _build(session: AsyncSession, backup_id) -> dict[str, _Person]:
+    people: dict[str, _Person] = {}
+
+    def ensure(key: str) -> _Person:
+        person = people.get(key)
+        if person is None:
+            person = people[key] = _Person(key)
+        return person
+
+    # WhatsApp 1:1 chats — the chat_guid is the counterparty JID. Most-recent
+    # first so wa_chats[0] is the thread to deep-link to.
+    wa_chat_key: dict = {}
+    chats = await session.scalars(
+        select(WhatsAppChat)
+        .where(WhatsAppChat.backup_id == backup_id)
+        .order_by(WhatsAppChat.last_message_at.desc().nullslast())
+    )
+    for chat in chats:
+        if not _is_one_to_one_chat(chat):
+            continue
+        key = identity_key(chat.chat_guid)
+        if not key:
+            continue
+        person = ensure(key)
+        person.wa_chats.append((chat.id, chat.chat_guid))
+        person.note_identifier(chat.chat_guid)
+        person.note_name(chat.title)
+        wa_chat_key[chat.id] = key
+    if wa_chat_key:
+        # Count only timestamped messages, to match the events the detail shows.
+        rows = (
+            await session.execute(
+                select(WhatsAppMessage.chat_id, func.count(), func.max(WhatsAppMessage.sent_at))
+                .where(WhatsAppMessage.chat_id.in_(list(wa_chat_key)), WhatsAppMessage.sent_at.is_not(None))
+                .group_by(WhatsAppMessage.chat_id)
             )
-        )
-    ).all()
-    for sender, sender_name, ts in wa:
-        bump(sender, sender_name, ts, "whatsapp_count")
+        ).all()
+        for chat_id, count, last in rows:
+            person = people[wa_chat_key[chat_id]]
+            person.whatsapp_count += count
+            person.last_at = _later(person.last_at, last)
 
-    msgs = (
-        await session.execute(
-            select(Message.sender, MessageConversation.display_name, Message.sent_at)
-            .join(MessageConversation, Message.conversation_id == MessageConversation.id)
-            .where(
-                Message.backup_id == backup_id,
-                Message.is_from_me.is_(False),
-                Message.sender.is_not(None),
+    # iMessage 1:1 conversations — keyed by the single participant handle.
+    conv_key: dict = {}
+    convs = await session.scalars(
+        select(MessageConversation)
+        .where(MessageConversation.backup_id == backup_id)
+        .order_by(MessageConversation.last_message_at.desc().nullslast())
+    )
+    for conv in convs:
+        handles = conv.participant_handles or []
+        if len(handles) != 1:
+            continue
+        key = identity_key(handles[0])
+        if not key:
+            continue
+        person = ensure(key)
+        person.imsg_convs.append((conv.id, conv.conversation_guid))
+        person.note_identifier(handles[0])
+        person.note_name(conv.display_name)
+        conv_key[conv.id] = key
+    if conv_key:
+        rows = (
+            await session.execute(
+                select(Message.conversation_id, func.count(), func.max(Message.sent_at))
+                .where(Message.conversation_id.in_(list(conv_key)), Message.sent_at.is_not(None))
+                .group_by(Message.conversation_id)
             )
-        )
-    ).all()
-    for sender, conv_name, ts in msgs:
-        bump(sender, conv_name, ts, "message_count")
+        ).all()
+        for conv_id, count, last in rows:
+            person = people[conv_key[conv_id]]
+            person.message_count += count
+            person.last_at = _later(person.last_at, last)
 
+    # Calls and voicemails — matched by the counterparty number. Only timestamped
+    # rows are counted, to match the events the detail returns.
     calls = (
         await session.execute(
             select(CallRecord.address, CallRecord.display_name, CallRecord.occurred_at).where(
-                CallRecord.backup_id == backup_id, CallRecord.address.is_not(None)
+                CallRecord.backup_id == backup_id,
+                CallRecord.address.is_not(None),
+                CallRecord.occurred_at.is_not(None),
             )
         )
     ).all()
     for address, name, ts in calls:
-        bump(address, name, ts, "call_count")
+        key = identity_key(address)
+        if not key:
+            continue
+        person = ensure(key)
+        person.call_count += 1
+        person.note_identifier(address)
+        person.note_name(name)
+        person.last_at = _later(person.last_at, ts)
 
     vms = (
         await session.execute(
             select(Voicemail.sender, Voicemail.received_at).where(
-                Voicemail.backup_id == backup_id, Voicemail.sender.is_not(None)
+                Voicemail.backup_id == backup_id,
+                Voicemail.sender.is_not(None),
+                Voicemail.received_at.is_not(None),
             )
         )
     ).all()
     for sender, ts in vms:
-        bump(sender, None, ts, "voicemail_count")
+        key = identity_key(sender)
+        if not key:
+            continue
+        person = ensure(key)
+        person.voicemail_count += 1
+        person.note_identifier(sender)
+        person.last_at = _later(person.last_at, ts)
 
-    summaries: dict[str, schemas.PersonSummaryModel] = {}
-    for key, entry in agg.items():
-        contact_name = contacts.get(key, (None, None))[0]
-        display = (
-            contact_name
-            or (entry["names"][0] if entry["names"] else None)
-            or (entry["identifiers"][0] if entry["identifiers"] else key)
-        )
-        total = entry["whatsapp_count"] + entry["message_count"] + entry["call_count"] + entry["voicemail_count"]
-        summaries[key] = schemas.PersonSummaryModel(
-            key=key,
-            kind=entry["kind"],
-            display_name=display,
-            is_contact=key in contacts,
-            identifiers=entry["identifiers"],
-            whatsapp_count=entry["whatsapp_count"],
-            message_count=entry["message_count"],
-            call_count=entry["call_count"],
-            voicemail_count=entry["voicemail_count"],
-            total_events=total,
-            last_activity_at=entry["last_activity_at"],
-        )
-    return summaries
+    return people
 
 
-async def _events_for_key(session: AsyncSession, backup_id, key: str) -> list[schemas.TimelineEventModel]:
-    events: list[schemas.TimelineEventModel] = []
+def _summary(person: _Person, contacts: dict[str, tuple[str, Contact]]) -> schemas.PersonSummaryModel:
+    contact_name = contacts.get(person.key, (None, None))[0]
+    display = (
+        contact_name
+        or (person.names[0] if person.names else None)
+        or (person.identifiers[0] if person.identifiers else person.key)
+    )
+    total = person.whatsapp_count + person.message_count + person.call_count + person.voicemail_count
+    return schemas.PersonSummaryModel(
+        key=person.key,
+        kind=person.kind,
+        display_name=display,
+        is_contact=person.key in contacts,
+        identifiers=person.identifiers,
+        whatsapp_count=person.whatsapp_count,
+        message_count=person.message_count,
+        call_count=person.call_count,
+        voicemail_count=person.voicemail_count,
+        total_events=total,
+        last_activity_at=person.last_at,
+    )
 
-    wa = (
-        await session.execute(
-            select(WhatsAppMessage.sender, WhatsAppMessage.body, WhatsAppMessage.sent_at)
-            .where(
-                WhatsAppMessage.backup_id == backup_id,
-                WhatsAppMessage.is_from_me.is_(False),
-                WhatsAppMessage.sender.is_not(None),
-            )
+
+async def _events_for_person(session: AsyncSession, backup_id, person: _Person) -> list[schemas.PersonEventModel]:
+    events: list[schemas.PersonEventModel] = []
+
+    # Per-thread cap takes the most recent _PER_TYPE timestamped messages.
+    for chat_id, _guid in person.wa_chats:
+        msgs = await session.scalars(
+            select(WhatsAppMessage)
+            .where(WhatsAppMessage.chat_id == chat_id, WhatsAppMessage.sent_at.is_not(None))
+            .order_by(WhatsAppMessage.sent_at.desc(), WhatsAppMessage.id.desc())
             .limit(_PER_TYPE)
         )
-    ).all()
-    for sender, body, ts in wa:
-        if ts is not None and identity_key(sender) == key:
+        for m in msgs:
             events.append(
-                schemas.TimelineEventModel(
-                    timestamp=ts, artifact_type="whatsapp_message", title=_truncate(body) or "(media)", subtitle="WhatsApp"
+                schemas.PersonEventModel(
+                    timestamp=m.sent_at,
+                    artifact_type="whatsapp_message",
+                    title=_truncate(m.body) or "(media)",
+                    subtitle="WhatsApp",
+                    is_from_me=m.is_from_me,
                 )
             )
 
-    msgs = (
-        await session.execute(
-            select(Message.sender, Message.text, Message.sent_at)
-            .where(
-                Message.backup_id == backup_id,
-                Message.is_from_me.is_(False),
-                Message.sender.is_not(None),
-            )
+    for conv_id, _guid in person.imsg_convs:
+        msgs = await session.scalars(
+            select(Message)
+            .where(Message.conversation_id == conv_id, Message.sent_at.is_not(None))
+            .order_by(Message.sent_at.desc(), Message.id.desc())
             .limit(_PER_TYPE)
         )
-    ).all()
-    for sender, text, ts in msgs:
-        if ts is not None and identity_key(sender) == key:
+        for m in msgs:
             events.append(
-                schemas.TimelineEventModel(
-                    timestamp=ts, artifact_type="message", title=_truncate(text) or "(attachment)", subtitle="iMessage / SMS"
+                schemas.PersonEventModel(
+                    timestamp=m.sent_at,
+                    artifact_type="message",
+                    title=_truncate(m.text) or "(attachment)",
+                    subtitle="iMessage / SMS",
+                    is_from_me=m.is_from_me,
                 )
             )
 
@@ -216,33 +313,41 @@ async def _events_for_key(session: AsyncSession, backup_id, key: str) -> list[sc
                 CallRecord.answered,
                 CallRecord.duration_seconds,
             )
-            .where(CallRecord.backup_id == backup_id, CallRecord.address.is_not(None))
-            .limit(_PER_TYPE)
+            .where(
+                CallRecord.backup_id == backup_id,
+                CallRecord.address.is_not(None),
+                CallRecord.occurred_at.is_not(None),
+            )
         )
     ).all()
     for address, name, ts, is_outgoing, answered, duration in calls:
-        if ts is not None and identity_key(address) == key:
+        if identity_key(address) == person.key:
             direction = "outgoing" if is_outgoing else "answered" if answered else "missed"
-            mins = f" · {duration}s" if duration else ""
+            dur = f" · {duration}s" if duration else ""
             events.append(
-                schemas.TimelineEventModel(
-                    timestamp=ts, artifact_type="call", title=name or address or "Call", subtitle=f"Call · {direction}{mins}"
+                schemas.PersonEventModel(
+                    timestamp=ts,
+                    artifact_type="call",
+                    title=name or address or "Call",
+                    subtitle=f"Call · {direction}{dur}",
                 )
             )
 
     vms = (
         await session.execute(
-            select(Voicemail.sender, Voicemail.received_at, Voicemail.duration_seconds)
-            .where(Voicemail.backup_id == backup_id, Voicemail.sender.is_not(None))
-            .limit(_PER_TYPE)
+            select(Voicemail.sender, Voicemail.received_at, Voicemail.duration_seconds).where(
+                Voicemail.backup_id == backup_id,
+                Voicemail.sender.is_not(None),
+                Voicemail.received_at.is_not(None),
+            )
         )
     ).all()
     for sender, ts, duration in vms:
-        if ts is not None and identity_key(sender) == key:
-            mins = f" · {duration}s" if duration else ""
+        if identity_key(sender) == person.key:
+            dur = f" · {duration}s" if duration else ""
             events.append(
-                schemas.TimelineEventModel(
-                    timestamp=ts, artifact_type="voicemail", title="Voicemail", subtitle=f"Voicemail{mins}"
+                schemas.PersonEventModel(
+                    timestamp=ts, artifact_type="voicemail", title="Voicemail", subtitle=f"Voicemail{dur}"
                 )
             )
 
@@ -264,8 +369,9 @@ async def list_people(
     await get_decrypted_backup(backup_id, registry)
     db_backup = await get_backup_or_404(backup_id, session)
     contacts = await _contacts_by_key(session, db_backup.id)
-    summaries = await _aggregate(session, db_backup.id, contacts)
-    items = sorted(summaries.values(), key=_sort_key, reverse=True)
+    people = await _build(session, db_backup.id)
+    items = [_summary(person, contacts) for person in people.values()]
+    items.sort(key=_sort_key, reverse=True)
     return schemas.PersonListResponse(items=items)
 
 
@@ -276,12 +382,12 @@ async def get_person(
     registry: BackupRegistry = Depends(get_backup_registry),
     session: AsyncSession = Depends(get_db_session),
 ):
-    """One person's contact card plus their merged activity across artifacts."""
+    """One person's contact card, their full 1:1 threads, and call/voicemail log."""
     await get_decrypted_backup(backup_id, registry)
     db_backup = await get_backup_or_404(backup_id, session)
     contacts = await _contacts_by_key(session, db_backup.id)
-    summaries = await _aggregate(session, db_backup.id, contacts)
-    person = summaries.get(key)
+    people = await _build(session, db_backup.id)
+    person = people.get(key)
     if person is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Person not found.")
 
@@ -298,5 +404,11 @@ async def get_person(
             avatar_file_id=contact.avatar_file_id,
         )
 
-    events = await _events_for_key(session, db_backup.id, key)
-    return schemas.PersonDetailResponse(person=person, contact=contact_model, events=events)
+    events = await _events_for_person(session, db_backup.id, person)
+    return schemas.PersonDetailResponse(
+        person=_summary(person, contacts),
+        contact=contact_model,
+        events=events,
+        whatsapp_chat_guid=person.wa_chats[0][1] if person.wa_chats else None,
+        conversation_guid=person.imsg_convs[0][1] if person.imsg_convs else None,
+    )

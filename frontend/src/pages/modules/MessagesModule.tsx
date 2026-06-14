@@ -23,9 +23,17 @@ interface Props {
   sessionToken?: string;
   onSessionToken?: (token: string) => void;
   initialSelectedGuid?: string;
+  onOpenPerson?: (personKey: string) => void;
 }
 
-export function MessagesModule({ apiToken, backup, sessionToken, onSessionToken, initialSelectedGuid }: Props) {
+export function MessagesModule({
+  apiToken,
+  backup,
+  sessionToken,
+  onSessionToken,
+  initialSelectedGuid,
+  onOpenPerson,
+}: Props) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [conversations, setConversations] = useState<MessageConversation[]>([]);
@@ -249,6 +257,8 @@ export function MessagesModule({ apiToken, backup, sessionToken, onSessionToken,
     () => conversations.find((c) => c.conversation_guid === selectedGuid) || null,
     [conversations, selectedGuid],
   );
+  // Only 1:1 conversations map to a single person in the People view.
+  const conversationIsOneToOne = (selectedConversation?.participant_handles?.length ?? 1) === 1;
 
   return (
     <>
@@ -377,7 +387,18 @@ export function MessagesModule({ apiToken, backup, sessionToken, onSessionToken,
                       >
                         {!message.is_from_me && (
                           <div className="message-sender">
-                            {formatMessageSender(message.sender, message.is_from_me, selectedConversation?.display_name)}
+                            {onOpenPerson && message.person_key && conversationIsOneToOne ? (
+                              <button
+                                type="button"
+                                className="sender-link"
+                                onClick={() => onOpenPerson(message.person_key!)}
+                                title="View this person"
+                              >
+                                {formatMessageSender(message.sender, message.is_from_me, selectedConversation?.display_name)}
+                              </button>
+                            ) : (
+                              formatMessageSender(message.sender, message.is_from_me, selectedConversation?.display_name)
+                            )}
                           </div>
                         )}
                         {message.text && <div className="message-body">{message.text}</div>}

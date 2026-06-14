@@ -61,18 +61,31 @@ export function Explorer({ apiToken, backup, sessionToken, onSessionToken }: Exp
   const [activeModule, setActiveModule] = useState<ModuleView>('files');
   const [pendingChatGuid, setPendingChatGuid] = useState<string | undefined>(undefined);
   const [pendingConversationGuid, setPendingConversationGuid] = useState<string | undefined>(undefined);
+  const [pendingPersonKey, setPendingPersonKey] = useState<string | undefined>(undefined);
   const [error, setError] = useState<string | null>(null);
 
   const goToModule = (module: ModuleView) => {
     setPendingChatGuid(undefined);
     setPendingConversationGuid(undefined);
+    setPendingPersonKey(undefined);
     setActiveModule(module);
   };
 
+  // Search results and the People "View conversation" jump both land here:
+  // open a WhatsApp/Messages thread and clear any pending person selection.
   const handleSearchNavigate = (target: SearchNavTarget) => {
     setPendingChatGuid(target.chatGuid);
     setPendingConversationGuid(target.conversationGuid);
+    setPendingPersonKey(undefined);
     setActiveModule(target.module as ModuleView);
+  };
+
+  // Reverse jump: clicking a sender inside a conversation opens that person.
+  const handleOpenPerson = (personKey: string) => {
+    setPendingChatGuid(undefined);
+    setPendingConversationGuid(undefined);
+    setPendingPersonKey(personKey);
+    setActiveModule('people');
   };
 
   const handleDownloadReport = async () => {
@@ -153,7 +166,14 @@ export function Explorer({ apiToken, backup, sessionToken, onSessionToken }: Exp
           <ErrorBoundary resetKey={activeModule} label={MODULES.find((m) => m.id === activeModule)?.label}>
           {activeModule === 'files' && <FilesModule apiToken={apiToken} backupId={backup.id} />}
 
-          {activeModule === 'people' && <PeopleModule apiToken={apiToken} backupId={backup.id} />}
+          {activeModule === 'people' && (
+            <PeopleModule
+              apiToken={apiToken}
+              backupId={backup.id}
+              initialSelectedKey={pendingPersonKey}
+              onOpenThread={handleSearchNavigate}
+            />
+          )}
 
           {activeModule === 'whatsapp' && (
             <WhatsAppModule
@@ -162,6 +182,7 @@ export function Explorer({ apiToken, backup, sessionToken, onSessionToken }: Exp
               sessionToken={sessionToken}
               onSessionToken={onSessionToken}
               initialSelectedGuid={pendingChatGuid}
+              onOpenPerson={handleOpenPerson}
             />
           )}
 
@@ -172,6 +193,7 @@ export function Explorer({ apiToken, backup, sessionToken, onSessionToken }: Exp
               sessionToken={sessionToken}
               onSessionToken={onSessionToken}
               initialSelectedGuid={pendingConversationGuid}
+              onOpenPerson={handleOpenPerson}
             />
           )}
 
