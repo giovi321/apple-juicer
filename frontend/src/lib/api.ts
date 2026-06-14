@@ -9,6 +9,7 @@ import type {
   NoteRecord,
   PhotoAsset,
   SafariVisit,
+  TimelineEvent,
   Voicemail,
   WhatsAppChat,
   WhatsAppMessage,
@@ -27,6 +28,7 @@ export type {
   NoteRecord,
   PhotoAsset,
   SafariVisit,
+  TimelineEvent,
   Voicemail,
   WhatsAppAttachment,
   WhatsAppChat,
@@ -306,6 +308,8 @@ export const api = {
       token,
       query: { q: query },
     }),
+  getTimeline: (backupId: string, token: string) =>
+    request<{ items: TimelineEvent[] }>(`/backups/${backupId}/timeline`, 'GET', { token }),
   downloadFile: async (backupId: string, fileId: string, token: string, sessionToken?: string) => {
     const urlString = apiUrl(`/backups/${backupId}/file/${fileId}`);
     const response = await fetch(urlString, {

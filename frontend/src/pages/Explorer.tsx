@@ -18,6 +18,7 @@ import { CallsTab } from './modules/CallsTab';
 import { SafariTab } from './modules/SafariTab';
 import { LocationsTab } from './modules/LocationsTab';
 import { VoicemailTab } from './modules/VoicemailTab';
+import { TimelineTab } from './modules/TimelineTab';
 import { SearchTab, type SearchNavTarget } from './modules/SearchTab';
 import { Attachment } from './modules/Attachment';
 import '../styles/Explorer.css';
@@ -41,10 +42,12 @@ type ModuleView =
   | 'safari'
   | 'locations'
   | 'voicemail'
+  | 'timeline'
   | 'search';
 
 const MODULES: { id: ModuleView; label: string; description: string }[] = [
   { id: 'search', label: 'Search', description: 'Search across all artifacts' },
+  { id: 'timeline', label: 'Timeline', description: 'Chronological activity' },
   { id: 'files', label: 'Manifest', description: 'Browse manifest entries' },
   { id: 'whatsapp', label: 'WhatsApp', description: 'Explore chats and messages' },
   { id: 'messages', label: 'Messages', description: 'iMessage/SMS conversations' },
@@ -1178,6 +1181,8 @@ export function Explorer({ apiToken, backup, sessionToken, onSessionToken }: Exp
         {activeModule === 'locations' && <LocationsTab apiToken={apiToken} backupId={backup.id} />}
 
         {activeModule === 'voicemail' && <VoicemailTab apiToken={apiToken} backupId={backup.id} />}
+
+        {activeModule === 'timeline' && <TimelineTab apiToken={apiToken} backupId={backup.id} />}
 
         {activeModule === 'search' && (
           <SearchTab apiToken={apiToken} backupId={backup.id} onNavigate={handleSearchNavigate} />

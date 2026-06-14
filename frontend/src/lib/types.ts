@@ -137,6 +137,13 @@ export interface Voicemail {
   trashed: boolean;
 }
 
+export interface TimelineEvent {
+  timestamp: string;
+  artifact_type: string;
+  title?: string | null;
+  subtitle?: string | null;
+}
+
 export interface MessageConversation {
   conversation_guid: string;
   service: string | null;
@@ -177,4 +184,5 @@ export type ArtifactView =
   | 'safari'
   | 'locations'
   | 'voicemail'
+  | 'timeline'
   | 'search';
