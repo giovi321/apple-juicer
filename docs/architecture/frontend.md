@@ -1,36 +1,58 @@
 # Frontend UI
 
-The frontend lives under `frontend/` and is built with React 18, TypeScript, Vite, Tailwind-esque utility classes, and Radix-inspired primitives. Production builds are emitted by Vite and served via `nginx:alpine` in Docker.
+The frontend lives under `frontend/` and is built with React 19, TypeScript, and
+Vite 7. Styling is plain, hand-written CSS (no Tailwind or component library).
+Production builds are emitted by Vite and served via `nginx:alpine` in Docker.
 
 ## Project Structure
 
-- `src/App.tsx` – single-page experience orchestrating backup selection, unlock flow, manifest browser, and artifact tabs.
-- `src/lib/api.ts` – thin wrapper around `fetch` that injects API/session tokens and exposes typed helper methods.
-- `src/lib/types.ts` – shared types mirroring backend schemas, plus view models for artifact renderers.
-- `src/components/*` (future) – when the UI grows, extract panels into components here.
+- `src/main.tsx` – entry point; mounts the app and wraps it in a top-level `ErrorBoundary`.
+- `src/AppNew.tsx` – root component that drives the app state machine (token → backup selection → decrypt/unlock → explorer).
+- `src/pages/` – screen-level components: `BackupSelector`, `PasswordPrompt`, and `Explorer`.
+- `src/pages/modules/` – the per-artifact modules rendered inside the Explorer (`FilesModule`, `WhatsAppModule`, `MessagesModule`, the tabular `*Tab` components, `SearchTab`, `TimelineTab`) plus the shared `Attachment` renderer.
+- `src/components/` – cross-cutting components such as `ErrorBoundary`.
+- `src/lib/` – `api.ts` (typed `fetch` wrapper that injects API/session tokens), `types.ts` (types mirroring backend schemas), `csv.ts` (client-side CSV export), and `useLocalStorage`.
+- `src/styles/` – component CSS (e.g. `Explorer.css`).
 
 ## State Machine
 
-1. **Session Setup** – user enters the API token (default `dev-token`), stored in component state and reused for every request.
-2. **Backup Selection** – `useEffect` calls `api.listBackups()` (GET `/backups`). The manifest tree stays disabled until a backup is unlocked.
-3. **Unlocking** – `api.unlockBackup()` posts the passphrase; on success it returns `session_token` + TTL which the frontend saves to issue `X-Backup-Session` headers.
-4. **Manifest Browsing** – the manifest view paginates through `/backups/{id}/files`, allows domain/path filters, and lazy-loads more rows.
-5. **Artifact Tabs** – additional tabs (Photos, Messages, WhatsApp, etc.) fire artifact-specific API calls once their data exists in Postgres.
+`AppNew` advances through four states:
 
-All requests respect the API base URL provided through `import.meta.env.VITE_API_BASE_URL` (set to `http://backend:8080` inside Docker). During local development Vite proxies to `http://localhost:8080`.
+1. **Token input** – the user enters the API token (default `dev-token`); it is persisted in `localStorage` and reused for every request.
+2. **Backup selection** – `api.listBackups()` (GET `/backups`) lists discovered backups. Selecting an already-decrypted backup jumps straight to the explorer; otherwise the password prompt is shown.
+3. **Decrypt & unlock** – decryption runs as a background worker job; the UI stays responsive and polls `getDecryptStatus` until the backup reaches `decrypted` (or `failed`). On success the backup is also unlocked, yielding a `session_token` (used for `X-Backup-Session`) saved per backup in `localStorage`.
+4. **Explorer** – a tabbed view over the decrypted backup.
 
-## Styling and Layout
+## Explorer
 
-- The root layout uses a fixed-width sidebar for backups and a flexible content area for manifest/artifacts.
-- Animations and transitions are handled via CSS modules + utility classes included in `src/App.tsx`.
-- Nginx injects cache headers so the SPA can be safely served behind reverse proxies.
+`Explorer` is a thin shell: it renders the module tab bar and delegates to one
+self-contained module at a time. Each module owns its own data fetching,
+pagination, search, and (for conversations) the unlock prompt, extraction
+overlay, and image preview. The shell wraps the active module in an
+`ErrorBoundary` keyed by the active tab, so a crash in one module shows an
+inline fallback and switching tabs recovers automatically rather than
+white-screening the app. Global-search results deep-link into a conversation via
+an `initialSelectedGuid` prop on the WhatsApp/Messages modules.
+
+All requests respect the API base URL provided through
+`import.meta.env.VITE_API_BASE_URL` (set to the backend in Docker); during local
+development Vite proxies to the backend on port `8080`.
+
+## Testing
+
+Component behaviour is covered by Vitest + React Testing Library (jsdom). Notable
+suites: `Explorer.test.tsx` characterizes the WhatsApp/Messages conversation
+flows (the regression guard for the module split) and `ErrorBoundary.test.tsx`
+covers the fallback/reset behaviour. Run with `npm run test`.
 
 ## Browser Compatibility
 
-The UI targets modern Chromium, Firefox, and Safari releases. It relies on Fetch API, async/await, and CSS grid/flexbox, so no legacy polyfills are included by default.
+The UI targets modern Chromium, Firefox, and Safari releases. It relies on the
+Fetch API, async/await, IntersectionObserver, and CSS grid/flexbox, so no legacy
+polyfills are included by default.
 
 ## Extensibility Tips
 
-- Represent new artifact types in `src/lib/types.ts`, then add view tabs in `App.tsx`.
-- If the API surface expands, keep `src/lib/api.ts` as the central spot for fetch wrappers so headers stay consistent.
-- For large feature work, consider migrating to React Router and splitting the manifest + artifact states into context providers.
+- Adding an artifact type is two halves: register an `ArtifactSpec` on the backend, then add a frontend module under `src/pages/modules/`, wire it into `Explorer`'s tab list, add a typed helper in `src/lib/api.ts`, and a type in `src/lib/types.ts`.
+- Keep `src/lib/api.ts` as the central spot for fetch wrappers so API/session headers stay consistent.
+- Reuse the shared `Attachment` component for any module that renders message attachments.
