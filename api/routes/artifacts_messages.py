@@ -17,6 +17,7 @@ from api.routes._common import (
     resolve_filesystem,
 )
 from api.security import require_api_token
+from core.correlation import identity_key
 from core.db.artifacts import Message, MessageAttachment, MessageConversation
 from core.services import BackupRegistry, UnlockManager
 
@@ -65,6 +66,7 @@ def _serialize_message_item(
         message_guid=message.message_guid,
         conversation_guid=conversation_guid,
         sender=message.sender,
+        person_key=identity_key(message.sender),
         is_from_me=message.is_from_me,
         sent_at=message.sent_at,
         text=message.text,

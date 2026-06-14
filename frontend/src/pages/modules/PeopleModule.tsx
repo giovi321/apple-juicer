@@ -1,10 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { api, type PersonDetail, type PersonSummary } from '../../lib/api';
+import type { SearchNavTarget } from './SearchTab';
 import '../../styles/ArtifactTabs.css';
 
 const EVENT_ICONS: Record<string, string> = {
-  whatsapp_message: '💬',
-  message: '📱',
   call: '📞',
   voicemail: '📭',
 };
@@ -18,14 +17,26 @@ function countLabel(p: PersonSummary): string {
   return parts.join(' · ');
 }
 
-export function PeopleModule({ apiToken, backupId }: { apiToken: string; backupId: string }) {
+interface Props {
+  apiToken: string;
+  backupId: string;
+  initialSelectedKey?: string;
+  onOpenThread?: (target: SearchNavTarget) => void;
+}
+
+export function PeopleModule({ apiToken, backupId, initialSelectedKey, onOpenThread }: Props) {
   const [people, setPeople] = useState<PersonSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [selectedKey, setSelectedKey] = useState<string | null>(null);
+  const [selectedKey, setSelectedKey] = useState<string | null>(initialSelectedKey ?? null);
   const [search, setSearch] = useState('');
   const [detail, setDetail] = useState<PersonDetail | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
+  const [detailError, setDetailError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (initialSelectedKey) setSelectedKey(initialSelectedKey);
+  }, [initialSelectedKey]);
 
   useEffect(() => {
     let mounted = true;
@@ -52,13 +63,18 @@ export function PeopleModule({ apiToken, backupId }: { apiToken: string; backupI
   const loadDetail = useCallback(
     (key: string) => {
       setDetailLoading(true);
+      setDetailError(null);
       api
         .getPerson(backupId, key, apiToken)
         .then((res) => {
           setDetail(res);
           setDetailLoading(false);
         })
-        .catch(() => setDetailLoading(false));
+        .catch((e) => {
+          setDetail(null);
+          setDetailError(e instanceof Error ? e.message : 'Could not load this person.');
+          setDetailLoading(false);
+        });
     },
     [backupId, apiToken],
   );
@@ -123,11 +139,35 @@ export function PeopleModule({ apiToken, backupId }: { apiToken: string; backupI
 
         <div className="whatsapp-messages">
           {!selected ? (
-            <div className="no-results">Select a person to view their activity</div>
+            selectedKey ? (
+              <div className="error-message">Could not open this person — they have no correlated activity.</div>
+            ) : (
+              <div className="no-results">Select a person to view their activity</div>
+            )
           ) : (
             <>
               <div className="whatsapp-header">
                 <h3>{selected.display_name}</h3>
+                <div style={{ display: 'flex', gap: '0.5rem' }}>
+                  {detail?.whatsapp_chat_guid && (
+                    <button
+                      className="download-btn"
+                      onClick={() => onOpenThread?.({ module: 'whatsapp', chatGuid: detail.whatsapp_chat_guid ?? undefined })}
+                    >
+                      View WhatsApp chat
+                    </button>
+                  )}
+                  {detail?.conversation_guid && (
+                    <button
+                      className="download-btn"
+                      onClick={() =>
+                        onOpenThread?.({ module: 'messages', conversationGuid: detail.conversation_guid ?? undefined })
+                      }
+                    >
+                      View conversation
+                    </button>
+                  )}
+                </div>
               </div>
               {detail?.contact && (
                 <div className="artifact-card" style={{ marginBottom: '1rem' }}>
@@ -150,6 +190,8 @@ export function PeopleModule({ apiToken, backupId }: { apiToken: string; backupI
               )}
               {detailLoading ? (
                 <div className="loading">Loading activity…</div>
+              ) : detailError ? (
+                <div className="error-message">{detailError}</div>
               ) : !detail || detail.events.length === 0 ? (
                 <div className="no-results">No activity events for this person.</div>
               ) : (
@@ -161,6 +203,7 @@ export function PeopleModule({ apiToken, backupId }: { apiToken: string; backupI
                       const day = date.toLocaleDateString();
                       const showDay = day !== lastDay;
                       lastDay = day;
+                      const isMessage = e.artifact_type === 'whatsapp_message' || e.artifact_type === 'message';
                       return (
                         <div key={`${e.artifact_type}-${e.timestamp}-${i}`}>
                           {showDay && (
@@ -168,14 +211,25 @@ export function PeopleModule({ apiToken, backupId }: { apiToken: string; backupI
                               {day}
                             </div>
                           )}
-                          <div className="artifact-card">
-                            <div className="artifact-card-meta">
-                              <span className="artifact-chip">{EVENT_ICONS[e.artifact_type] ?? '•'}</span>
-                              <span>{date.toLocaleTimeString()}</span>
-                              {e.subtitle && <span>{e.subtitle}</span>}
+                          {isMessage ? (
+                            <div className={`message ${e.is_from_me ? 'from-me' : 'from-other'}`}>
+                              {!e.is_from_me && <div className="message-sender">{selected.display_name}</div>}
+                              <div className="message-body">{e.title || ''}</div>
+                              <div className="message-time">
+                                {e.subtitle ? `${e.subtitle} · ` : ''}
+                                {date.toLocaleString()}
+                              </div>
                             </div>
-                            <div className="artifact-card-body">{e.title || ''}</div>
-                          </div>
+                          ) : (
+                            <div className="artifact-card">
+                              <div className="artifact-card-meta">
+                                <span className="artifact-chip">{EVENT_ICONS[e.artifact_type] ?? '•'}</span>
+                                <span>{date.toLocaleTimeString()}</span>
+                                {e.subtitle && <span>{e.subtitle}</span>}
+                              </div>
+                              <div className="artifact-card-body">{e.title || ''}</div>
+                            </div>
+                          )}
                         </div>
                       );
                     });

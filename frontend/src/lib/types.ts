@@ -60,6 +60,7 @@ export interface WhatsAppMessage {
   message_id: string;
   sender: string | null;
   sender_name: string | null;
+  person_key?: string | null;
   sent_at: string | null;
   message_type: string | null;
   body: string | null;
@@ -158,10 +159,20 @@ export interface PersonSummary {
   last_activity_at?: string | null;
 }
 
+export interface PersonEvent {
+  timestamp: string;
+  artifact_type: string;
+  title?: string | null;
+  subtitle?: string | null;
+  is_from_me?: boolean | null;
+}
+
 export interface PersonDetail {
   person: PersonSummary;
   contact: ContactRecord | null;
-  events: TimelineEvent[];
+  events: PersonEvent[];
+  whatsapp_chat_guid?: string | null;
+  conversation_guid?: string | null;
 }
 
 export interface MessageConversation {
@@ -184,6 +195,7 @@ export interface MessageItem {
   message_guid: string;
   conversation_guid: string;
   sender: string | null;
+  person_key?: string | null;
   is_from_me: boolean;
   sent_at: string | null;
   text: string | null;

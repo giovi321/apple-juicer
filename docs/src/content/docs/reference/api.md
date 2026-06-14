@@ -152,9 +152,9 @@ Returns a `PersonListResponse` (`{ items: [PersonSummaryModel] }`), most recent 
 
 ### `GET /backups/{backup_id}/people/{key}`
 
-The key is the normalized `kind:value` form from the list (e.g. `phone:5550001111`). Returns a `PersonDetailResponse` (`{ person, contact, events }`): the person summary, the matching `ContactModel` if one exists, and the merged `TimelineEventModel` events for that person, newest first. `404` if the key has no correlated activity.
+The key is the normalized `kind:value` form from the list (e.g. `phone:5550001111`). Returns a `PersonDetailResponse` (`{ person, contact, events, whatsapp_chat_guid, conversation_guid }`): the person summary, the matching `ContactModel` if one exists, the merged `PersonEventModel` events newest first, and the linked 1:1 thread guids for deep-linking into the WhatsApp/Messages views. `404` if the key has no correlated activity.
 
-Scope: events are counterparty-authored — incoming WhatsApp/iMessage messages plus the full call and voicemail log. Full bidirectional threads are a later enhancement.
+Events cover the person's full 1:1 WhatsApp and iMessage threads in **both directions** (each event carries `is_from_me`) plus the full call and voicemail log. Matching pivots on the thread container — a 1:1 WhatsApp chat whose counterparty JID normalizes to the key, or an iMessage conversation with a single matching handle — so outgoing replies (which have no sender) are included. Group chats are excluded.
 
 ## Report
 

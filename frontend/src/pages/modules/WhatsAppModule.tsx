@@ -51,9 +51,17 @@ interface Props {
   sessionToken?: string;
   onSessionToken?: (token: string) => void;
   initialSelectedGuid?: string;
+  onOpenPerson?: (personKey: string) => void;
 }
 
-export function WhatsAppModule({ apiToken, backup, sessionToken, onSessionToken, initialSelectedGuid }: Props) {
+export function WhatsAppModule({
+  apiToken,
+  backup,
+  sessionToken,
+  onSessionToken,
+  initialSelectedGuid,
+  onOpenPerson,
+}: Props) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [chats, setChats] = useState<WhatsAppChat[]>([]);
@@ -273,6 +281,12 @@ export function WhatsAppModule({ apiToken, backup, sessionToken, onSessionToken,
     () => chats.find((c) => c.chat_guid === selectedChatGuid) || null,
     [chats, selectedChatGuid],
   );
+  // Only 1:1 chats map to a single person; groups aren't in the People view.
+  const chatIsOneToOne = useMemo(() => {
+    if (!selectedChat) return false;
+    if ((selectedChat.chat_guid || '').includes('g.us')) return false;
+    return selectedChat.participant_count == null || selectedChat.participant_count <= 2;
+  }, [selectedChat]);
 
   return (
     <>
@@ -388,7 +402,18 @@ export function WhatsAppModule({ apiToken, backup, sessionToken, onSessionToken,
                       >
                         {!message.is_from_me && (
                           <div className="message-sender">
-                            {formatWhatsAppSender(message.sender, message.sender_name, message.is_from_me, selectedChat?.title)}
+                            {onOpenPerson && message.person_key && chatIsOneToOne ? (
+                              <button
+                                type="button"
+                                className="sender-link"
+                                onClick={() => onOpenPerson(message.person_key!)}
+                                title="View this person"
+                              >
+                                {formatWhatsAppSender(message.sender, message.sender_name, message.is_from_me, selectedChat?.title)}
+                              </button>
+                            ) : (
+                              formatWhatsAppSender(message.sender, message.sender_name, message.is_from_me, selectedChat?.title)
+                            )}
                           </div>
                         )}
                         {message.body && <div className="message-body">{message.body}</div>}

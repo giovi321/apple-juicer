@@ -17,6 +17,7 @@ from api.routes._common import (
     resolve_filesystem,
 )
 from api.security import require_api_token
+from core.correlation import identity_key
 from core.db.artifacts import WhatsAppAttachment, WhatsAppChat, WhatsAppMessage
 from core.services import BackupRegistry, UnlockManager
 
@@ -107,6 +108,9 @@ def _serialize_message(chat_guid: str, message: WhatsAppMessage) -> schemas.What
         message_id=message.message_id,
         sender=_normalize_whatsapp_sender(message.sender),
         sender_name=message.sender_name,
+        # Key off the chat's counterparty (what the People view aggregates on),
+        # not the raw per-message sender, which may be a bytes blob or a LID.
+        person_key=identity_key(chat_guid),
         sent_at=message.sent_at,
         message_type=message.media_type,
         body=message.body,

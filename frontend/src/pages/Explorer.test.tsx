@@ -26,6 +26,9 @@ vi.mock('../lib/api', () => ({
     // Messages
     listMessageConversations: vi.fn(),
     listMessages: vi.fn(),
+    // People
+    listPeople: vi.fn(),
+    getPerson: vi.fn(),
   },
 }));
 
@@ -44,6 +47,7 @@ function baseMocks() {
   vi.mocked(api.listDomains).mockResolvedValue({ domains: [] });
   vi.mocked(api.listFiles).mockResolvedValue({ items: [], limit: 200, offset: 0 });
   vi.mocked(api.listBackups).mockResolvedValue({ backups: [BACKUP], base_directory: '/' });
+  vi.mocked(api.listPeople).mockResolvedValue({ items: [] });
 }
 
 describe('Explorer · WhatsApp flow', () => {
@@ -146,5 +150,127 @@ describe('Explorer · Messages flow', () => {
     expect(await screen.findByText('Hello from Grace')).toBeInTheDocument();
     expect(api.listMessageConversations).toHaveBeenCalledWith('b1', 't');
     expect(api.listMessages).toHaveBeenCalledWith('b1', 'c1', 't');
+  });
+});
+
+describe('Explorer · People deep-link', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    baseMocks();
+  });
+
+  it('jumps from a conversation sender to that person in the People view', async () => {
+    const conv = {
+      conversation_guid: 'c1',
+      service: 'iMessage',
+      display_name: 'Grace',
+      last_message_at: null,
+      participant_handles: ['+15550002222'],
+    };
+    vi.mocked(api.listMessageConversations).mockResolvedValue({ items: [conv] });
+    vi.mocked(api.listMessages).mockResolvedValue({
+      conversation: conv,
+      messages: [
+        {
+          message_guid: 'im1',
+          conversation_guid: 'c1',
+          sender: '+15550002222',
+          person_key: 'phone:5550002222',
+          is_from_me: false,
+          sent_at: '2020-01-01T00:00:00Z',
+          text: 'Hello from Grace',
+          has_attachments: false,
+          attachments: [],
+          metadata: null,
+        },
+      ],
+    });
+    const grace = {
+      key: 'phone:5550002222',
+      kind: 'phone',
+      display_name: 'Grace',
+      is_contact: false,
+      identifiers: ['+15550002222'],
+      whatsapp_count: 0,
+      message_count: 2,
+      call_count: 0,
+      voicemail_count: 0,
+      total_events: 2,
+      last_activity_at: null,
+    };
+    vi.mocked(api.listPeople).mockResolvedValue({ items: [grace] });
+    vi.mocked(api.getPerson).mockResolvedValue({
+      person: grace,
+      contact: null,
+      events: [],
+      whatsapp_chat_guid: null,
+      conversation_guid: 'c1',
+    });
+
+    render(<Explorer apiToken="t" backup={BACKUP} />);
+    await userEvent.click(screen.getByRole('button', { name: /Messages/ }));
+
+    // the incoming sender name is clickable
+    const senderLink = await screen.findByRole('button', { name: /\+15550002222/ });
+    await userEvent.click(senderLink);
+
+    // the People view opens, scoped to that person
+    expect(await screen.findByPlaceholderText('Search people…')).toBeInTheDocument();
+    expect(api.getPerson).toHaveBeenCalledWith('b1', 'phone:5550002222', 't');
+  });
+
+  it('jumps from a WhatsApp sender (1:1 chat) to that person', async () => {
+    const chat = { chat_guid: 'g1', title: 'Ada', participant_count: 2, last_message_at: null, metadata: null };
+    vi.mocked(api.listWhatsAppChats).mockResolvedValue({ items: [chat] });
+    vi.mocked(api.listWhatsAppMessages).mockResolvedValue({
+      chat,
+      messages: [
+        {
+          chat_guid: 'g1',
+          message_id: 'm1',
+          sender: '15550001111',
+          sender_name: 'Ada',
+          person_key: 'phone:5550001111',
+          sent_at: '2020-01-01T00:00:00Z',
+          message_type: '0',
+          body: 'Hi there',
+          is_from_me: false,
+          has_attachments: false,
+          attachments: [],
+          metadata: null,
+        },
+      ],
+    });
+    const ada = {
+      key: 'phone:5550001111',
+      kind: 'phone',
+      display_name: 'Ada Lovelace',
+      is_contact: true,
+      identifiers: ['15550001111@s.whatsapp.net'],
+      whatsapp_count: 2,
+      message_count: 0,
+      call_count: 0,
+      voicemail_count: 0,
+      total_events: 2,
+      last_activity_at: null,
+    };
+    vi.mocked(api.listPeople).mockResolvedValue({ items: [ada] });
+    vi.mocked(api.getPerson).mockResolvedValue({
+      person: ada,
+      contact: null,
+      events: [],
+      whatsapp_chat_guid: 'g1',
+      conversation_guid: null,
+    });
+
+    render(<Explorer apiToken="t" backup={BACKUP} />);
+    await userEvent.click(screen.getByRole('button', { name: /WhatsApp/ }));
+
+    // the formatted sender name is clickable (only in 1:1 chats)
+    const senderLink = await screen.findByRole('button', { name: /Ada \(\+15550001111\)/ });
+    await userEvent.click(senderLink);
+
+    expect(await screen.findByPlaceholderText('Search people…')).toBeInTheDocument();
+    expect(api.getPerson).toHaveBeenCalledWith('b1', 'phone:5550001111', 't');
   });
 });

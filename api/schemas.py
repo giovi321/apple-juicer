@@ -90,6 +90,7 @@ class WhatsAppMessageModel(BaseModel):
     message_id: str
     sender: Optional[str] = None
     sender_name: Optional[str] = None
+    person_key: Optional[str] = None
     sent_at: Optional[datetime] = None
     message_type: Optional[str] = None
     body: Optional[str] = None
@@ -128,6 +129,7 @@ class MessageItemModel(BaseModel):
     message_guid: str
     conversation_guid: str
     sender: Optional[str] = None
+    person_key: Optional[str] = None
     is_from_me: bool
     sent_at: Optional[datetime] = None
     text: Optional[str] = None
@@ -299,7 +301,17 @@ class PersonListResponse(BaseModel):
     items: list[PersonSummaryModel]
 
 
+class PersonEventModel(BaseModel):
+    timestamp: datetime
+    artifact_type: str
+    title: Optional[str] = None
+    subtitle: Optional[str] = None
+    is_from_me: Optional[bool] = None
+
+
 class PersonDetailResponse(BaseModel):
     person: PersonSummaryModel
     contact: Optional[ContactModel] = None
-    events: list[TimelineEventModel]
+    events: list[PersonEventModel]
+    whatsapp_chat_guid: Optional[str] = None
+    conversation_guid: Optional[str] = None
