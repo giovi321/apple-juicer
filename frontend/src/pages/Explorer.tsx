@@ -2,7 +2,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   api,
   type BackupSummary,
-  type ManifestEntry,
   type MessageAttachment,
   type MessageConversation,
   type MessageItem,
@@ -19,6 +18,7 @@ import { SafariTab } from './modules/SafariTab';
 import { LocationsTab } from './modules/LocationsTab';
 import { VoicemailTab } from './modules/VoicemailTab';
 import { TimelineTab } from './modules/TimelineTab';
+import { FilesModule } from './modules/FilesModule';
 import { SearchTab, type SearchNavTarget } from './modules/SearchTab';
 import { Attachment } from './modules/Attachment';
 import '../styles/Explorer.css';
@@ -63,12 +63,8 @@ const MODULES: { id: ModuleView; label: string; description: string }[] = [
 
 export function Explorer({ apiToken, backup, sessionToken, onSessionToken }: ExplorerProps) {
   const [activeModule, setActiveModule] = useState<ModuleView>('files');
-  const [domains, setDomains] = useState<string[]>([]);
-  const [selectedDomain, setSelectedDomain] = useState<string | null>(null);
-  const [files, setFiles] = useState<ManifestEntry[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [searchTerm, setSearchTerm] = useState('');
   const [chatSearchTerm, setChatSearchTerm] = useState('');
   const [messageSearchTerm, setMessageSearchTerm] = useState('');
   const [whatsappChats, setWhatsappChats] = useState<WhatsAppChat[]>([]);
@@ -97,39 +93,6 @@ export function Explorer({ apiToken, backup, sessionToken, onSessionToken }: Exp
   const [extractedConversations, setExtractedConversations] = useState<Set<string>>(new Set());
   const imessagesListRef = useRef<HTMLDivElement | null>(null);
 
-  const fetchDomains = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const response = await api.listDomains(backup.id, apiToken);
-      setDomains(response.domains);
-      if (response.domains.length > 0 && !selectedDomain) {
-        setSelectedDomain(response.domains[0]);
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load domains');
-    } finally {
-      setLoading(false);
-    }
-  }, [backup.id, apiToken, selectedDomain]);
-
-  const fetchFiles = useCallback(async () => {
-    if (!selectedDomain) return;
-    setLoading(true);
-    setError(null);
-    try {
-      const response = await api.listFiles(backup.id, apiToken, {
-        domain: selectedDomain,
-        path_like: searchTerm ? `%${searchTerm}%` : null,
-        limit: 200,
-      });
-      setFiles(response.items);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load files');
-    } finally {
-      setLoading(false);
-    }
-  }, [backup.id, apiToken, selectedDomain, searchTerm]);
 
   const fetchWhatsAppChats = useCallback(async () => {
     console.log('DEBUG: fetchWhatsAppChats called');
@@ -264,17 +227,6 @@ export function Explorer({ apiToken, backup, sessionToken, onSessionToken }: Exp
     imessagesListRef.current.scrollTop = imessagesListRef.current.scrollHeight;
   }, [selectedConversationGuid, loading]);
 
-  useEffect(() => {
-    if (activeModule === 'files') {
-      void fetchDomains();
-    }
-  }, [activeModule, fetchDomains]);
-
-  useEffect(() => {
-    if (activeModule === 'files') {
-      void fetchFiles();
-    }
-  }, [selectedDomain, searchTerm, activeModule, fetchFiles]);
 
   useEffect(() => {
     if (activeModule === 'whatsapp') {
@@ -427,23 +379,6 @@ export function Explorer({ apiToken, backup, sessionToken, onSessionToken }: Exp
   }, [messageConversations, selectedConversationGuid]);
 
   const isConversationExtracted = selectedConversationGuid ? extractedConversations.has(selectedConversationGuid) : false;
-
-  const handleDownloadFile = async (fileId: string) => {
-    try {
-      const response = await api.downloadFile(backup.id, fileId, apiToken);
-      const blob = await response.blob();
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = fileId;
-      document.body.appendChild(a);
-      a.click();
-      window.URL.revokeObjectURL(url);
-      document.body.removeChild(a);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Download failed');
-    }
-  };
 
   const handleDownloadReport = async () => {
     try {
@@ -715,75 +650,7 @@ export function Explorer({ apiToken, backup, sessionToken, onSessionToken }: Exp
         </div>
 
         <div className="module-content">
-          {activeModule === 'files' && (
-            <div className="files-module">
-              <div className="files-controls">
-                <div className="domain-selector">
-                  <select
-                    id="domain-select"
-                    value={selectedDomain || ''}
-                    onChange={(e) => setSelectedDomain(e.target.value)}
-                    disabled={loading || extracting}
-                  >
-                    {domains.map((domain) => (
-                      <option key={domain} value={domain}>
-                        {domain}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div className="search-box search-box-wide">
-                  <input
-                    type="text"
-                    placeholder="Search files..."
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    disabled={loading || extracting}
-                    autoComplete="off"
-                  />
-                </div>
-              </div>
-
-              {error && <div className="error-message">{error}</div>}
-
-              {loading ? (
-                <div className="loading">Loading files...</div>
-              ) : files.length === 0 ? (
-                <div className="no-results">No files found in this domain.</div>
-              ) : (
-                <div className="files-list">
-                  <table>
-                    <thead>
-                      <tr>
-                        <th>File ID</th>
-                        <th>Path</th>
-                        <th>Size</th>
-                        <th>Action</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {files.map((file) => (
-                        <tr key={file.file_id}>
-                          <td className="file-id">{file.file_id}</td>
-                          <td className="file-path">{file.relative_path}</td>
-                          <td className="file-size">{file.size ? `${(file.size / 1024).toFixed(2)} KB` : 'N/A'}</td>
-                          <td className="file-action">
-                            <button
-                              onClick={() => handleDownloadFile(file.file_id)}
-                              className="download-btn"
-                              disabled={extracting}
-                            >
-                              Download
-                            </button>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </div>
-          )}
+          {activeModule === 'files' && <FilesModule apiToken={apiToken} backupId={backup.id} />}
 
 {activeModule === 'whatsapp' && (
           <div className="whatsapp-module">
