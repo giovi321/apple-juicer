@@ -28,6 +28,7 @@ from core.db.artifacts import (
     Note,
     PhotoAsset,
     SafariVisit,
+    Voicemail,
     WhatsAppAttachment,
     WhatsAppChat,
     WhatsAppMessage,
@@ -41,6 +42,7 @@ from parsers import messages as messages_parser
 from parsers import notes as notes_parser
 from parsers import photos as photos_parser
 from parsers import safari as safari_parser
+from parsers import voicemail as voicemail_parser
 from parsers import whatsapp as whatsapp_parser
 
 
@@ -76,6 +78,7 @@ async def truncate_artifacts(session: AsyncSession, backup: Backup) -> None:
         CallRecord,
         SafariVisit,
         LocationPoint,
+        Voicemail,
         ArtifactSearchIndex,
     ]
     for table in tables_with_backup_id:
@@ -584,6 +587,44 @@ async def ingest_locations(session: AsyncSession, backup: Backup, db_path: Path 
         for point in points
     ]
     session.add_all(rows)
+    backup.indexing_progress = (backup.indexing_progress or 0) + 1
+    await session.flush()
+
+
+async def ingest_voicemail(session: AsyncSession, backup: Backup, db_path: Path | None) -> None:
+    if not db_path or not str(db_path).strip() or not db_path.exists():
+        return
+    backup.indexing_artifact = "voicemail"
+    await session.flush()
+    voicemails = voicemail_parser.parse_voicemail(db_path)
+    rows = [
+        Voicemail(
+            backup_id=backup.id,
+            voicemail_identifier=vm.identifier,
+            sender=vm.sender,
+            received_at=vm.received_at,
+            duration_seconds=vm.duration_seconds,
+            trashed=vm.trashed,
+        )
+        for vm in voicemails
+    ]
+    session.add_all(rows)
+    await _add_search_rows(
+        session,
+        backup,
+        "voicemail",
+        [
+            ArtifactSearchIndex(
+                backup_id=backup.id,
+                artifact_type="voicemail",
+                artifact_ref=vm.identifier,
+                display_text=vm.sender,
+                search_text=vm.sender,
+            )
+            for vm in voicemails
+            if vm.sender
+        ],
+    )
     backup.indexing_progress = (backup.indexing_progress or 0) + 1
     await session.flush()
 

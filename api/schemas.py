@@ -246,6 +246,18 @@ class LocationListResponse(BaseModel):
     items: list[LocationModel]
 
 
+class VoicemailModel(BaseModel):
+    voicemail_identifier: str
+    sender: Optional[str] = None
+    received_at: Optional[datetime] = None
+    duration_seconds: Optional[int] = None
+    trashed: bool = False
+
+
+class VoicemailListResponse(BaseModel):
+    items: list[VoicemailModel]
+
+
 class SearchResultModel(BaseModel):
     artifact_type: str
     artifact_ref: str

@@ -18,6 +18,7 @@ EXPECTED_KEYS = {
     "calls",
     "safari",
     "locations",
+    "voicemail",
 }
 
 

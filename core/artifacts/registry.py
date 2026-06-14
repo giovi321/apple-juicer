@@ -70,6 +70,13 @@ REGISTRY: list[ArtifactSpec] = [
         source_relative_path="Library/Caches/com.apple.routined/Cache.sqlite",
         ingest=ingest.ingest_locations,
     ),
+    ArtifactSpec(
+        key="voicemail",
+        db_filename="voicemail.db",
+        source_domain="HomeDomain",
+        source_relative_path="Library/Voicemail/voicemail.db",
+        ingest=ingest.ingest_voicemail,
+    ),
 ]
 
 
