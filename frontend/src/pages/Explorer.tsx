@@ -18,7 +18,7 @@ import { CallsTab } from './modules/CallsTab';
 import { SafariTab } from './modules/SafariTab';
 import { LocationsTab } from './modules/LocationsTab';
 import { VoicemailTab } from './modules/VoicemailTab';
-import { SearchTab } from './modules/SearchTab';
+import { SearchTab, type SearchNavTarget } from './modules/SearchTab';
 import { Attachment } from './modules/Attachment';
 import '../styles/Explorer.css';
 
@@ -457,6 +457,12 @@ export function Explorer({ apiToken, backup, sessionToken, onSessionToken }: Exp
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Report failed');
     }
+  };
+
+  const handleSearchNavigate = (target: SearchNavTarget) => {
+    if (target.chatGuid) setSelectedChatGuid(target.chatGuid);
+    if (target.conversationGuid) setSelectedConversationGuid(target.conversationGuid);
+    setActiveModule(target.module as ModuleView);
   };
 
   const handleDownloadAttachment = async (relativePath: string, filename: string) => {
@@ -1173,7 +1179,9 @@ export function Explorer({ apiToken, backup, sessionToken, onSessionToken }: Exp
 
         {activeModule === 'voicemail' && <VoicemailTab apiToken={apiToken} backupId={backup.id} />}
 
-        {activeModule === 'search' && <SearchTab apiToken={apiToken} backupId={backup.id} />}
+        {activeModule === 'search' && (
+          <SearchTab apiToken={apiToken} backupId={backup.id} onNavigate={handleSearchNavigate} />
+        )}
       </div>
       </div>
 
