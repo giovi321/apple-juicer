@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { api, type CalendarEvent } from '../../lib/api';
+import { downloadCsv } from '../../lib/csv';
 import '../../styles/ArtifactTabs.css';
 
 function formatWhen(event: CalendarEvent): string {
@@ -45,9 +46,21 @@ export function CalendarTab({ apiToken, backupId }: { apiToken: string; backupId
   if (error) return <div className="error-message">{error}</div>;
   if (!items.length) return <div className="no-results">No calendar events found in this backup.</div>;
 
+  const exportCsv = () =>
+    downloadCsv(
+      'calendar.csv',
+      ['Title', 'Calendar', 'Starts', 'Ends', 'All day', 'Location', 'Notes'],
+      items.map((e) => [e.title, e.calendar_name, e.starts_at, e.ends_at, e.is_all_day, e.location, e.notes]),
+    );
+
   return (
     <div className="artifact-tab">
-      <div className="artifact-count">{items.length} events</div>
+      <div className="artifact-toolbar">
+        <span className="artifact-count">{items.length} events</span>
+        <button className="download-btn" onClick={exportCsv}>
+          Download CSV
+        </button>
+      </div>
       <div className="artifact-cards">
         {items.map((e, i) => (
           <div key={e.event_identifier ?? i} className="artifact-card">

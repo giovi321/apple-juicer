@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { api, type NoteRecord } from '../../lib/api';
+import { downloadCsv } from '../../lib/csv';
 import '../../styles/ArtifactTabs.css';
 
 export function NotesTab({ apiToken, backupId }: { apiToken: string; backupId: string }) {
@@ -34,9 +35,21 @@ export function NotesTab({ apiToken, backupId }: { apiToken: string; backupId: s
   if (error) return <div className="error-message">{error}</div>;
   if (!items.length) return <div className="no-results">No notes found in this backup.</div>;
 
+  const exportCsv = () =>
+    downloadCsv(
+      'notes.csv',
+      ['Title', 'Folder', 'Modified', 'Created', 'Body'],
+      items.map((n) => [n.title, n.folder, n.last_modified_at, n.created_at, n.body]),
+    );
+
   return (
     <div className="artifact-tab">
-      <div className="artifact-count">{items.length} notes</div>
+      <div className="artifact-toolbar">
+        <span className="artifact-count">{items.length} notes</span>
+        <button className="download-btn" onClick={exportCsv}>
+          Download CSV
+        </button>
+      </div>
       <div className="artifact-cards">
         {items.map((n, i) => (
           <div key={n.note_identifier ?? i} className="artifact-card">

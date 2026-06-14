@@ -6,11 +6,15 @@ A full-stack web application for extracting and analyzing data from iOS (Finder/
 ## Features
 
 - **Backup Discovery** - Automatically discover and index iOS backups
-- **Decryption** - Decrypt encrypted backups with password prompts
-- **Artifact Parsing** - Extract and browse WhatsApp, Messages, Photos, Notes, Calendar, and Contacts
-- **Search & Filter** - Search through manifest files and artifacts
-- **Modern UI** - Clean, responsive interface built with React and TailwindCSS
+- **Decryption** - Decrypt encrypted backups in the background (the UI stays responsive and polls for completion)
+- **Artifact Parsing** - Extract and browse WhatsApp, Messages, Photos, Notes, Calendar, Contacts, Call history, and Safari history
+- **Photo viewer** - View and download the actual images, not just metadata
+- **Global search** - Search across every indexed artifact type at once
+- **CSV export** - Export the tabular views (Photos, Calls, Safari, Contacts) to CSV
+- **Modern UI** - Clean, responsive interface built with React and Vite
 - **Docker Ready** - Deploy with a single command using Docker Compose
+
+New artifact types are a single registration in `core/artifacts/registry.py` (parser + spec + schema + router + UI tab).
 
 ## Quick Start
 
