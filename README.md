@@ -1,5 +1,20 @@
-# Apple Juicer
-<img width="100" height="100" alt="logo" src="https://github.com/user-attachments/assets/c8d04b50-4119-470b-8ed0-6611357b1a8b" />
+<p align="center">
+  <img src="docs/src/assets/logo.svg" alt="Apple Juicer" width="120" />
+</p>
+
+<h1 align="center">Apple Juicer</h1>
+
+<p align="center">
+  <a href="https://github.com/giovi321/apple-juicer/actions/workflows/ci.yml"><img src="https://github.com/giovi321/apple-juicer/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <a href="https://github.com/giovi321/apple-juicer/actions/workflows/docs.yml"><img src="https://github.com/giovi321/apple-juicer/actions/workflows/docs.yml/badge.svg" alt="Docs"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-GPLv3-blue.svg" alt="License: GPLv3"></a>
+  <img src="https://img.shields.io/badge/python-3.11%2B-blue" alt="Python 3.11+">
+  <img src="https://img.shields.io/badge/node-20%2B-green" alt="Node 20+">
+</p>
+
+<p align="center">
+  <a href="https://giovi321.github.io/apple-juicer/"><img src="https://img.shields.io/badge/Read_the_docs-2563eb?style=for-the-badge&logo=readthedocs&logoColor=white" alt="Read the documentation"></a>
+</p>
 
 A full-stack web application for extracting and analyzing data from iOS (Finder/iTunes) backups. Built with FastAPI, React, PostgreSQL, and Redis.
 
@@ -69,10 +84,6 @@ alembic upgrade head
 ```bash
 uvicorn api.main:create_app --factory --reload
 ```
-
-## Documentation
-
-Full documentation is available at [https://giovi321.github.io/apple-juicer](https://giovi321.github.io/apple-juicer)
 
 ## Architecture
 
