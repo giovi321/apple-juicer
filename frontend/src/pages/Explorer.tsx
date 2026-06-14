@@ -1,14 +1,8 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import {
-  api,
-  type BackupSummary,
-  type MessageAttachment,
-  type MessageConversation,
-  type MessageItem,
-  type WhatsAppAttachment,
-  type WhatsAppChat,
-  type WhatsAppMessage,
-} from '../lib/api';
+import { useState } from 'react';
+import { api, type BackupSummary } from '../lib/api';
+import { FilesModule } from './modules/FilesModule';
+import { WhatsAppModule } from './modules/WhatsAppModule';
+import { MessagesModule } from './modules/MessagesModule';
 import { PhotosTab } from './modules/PhotosTab';
 import { NotesTab } from './modules/NotesTab';
 import { CalendarTab } from './modules/CalendarTab';
@@ -18,9 +12,7 @@ import { SafariTab } from './modules/SafariTab';
 import { LocationsTab } from './modules/LocationsTab';
 import { VoicemailTab } from './modules/VoicemailTab';
 import { TimelineTab } from './modules/TimelineTab';
-import { FilesModule } from './modules/FilesModule';
 import { SearchTab, type SearchNavTarget } from './modules/SearchTab';
-import { Attachment } from './modules/Attachment';
 import '../styles/Explorer.css';
 
 interface ExplorerProps {
@@ -63,324 +55,24 @@ const MODULES: { id: ModuleView; label: string; description: string }[] = [
 
 export function Explorer({ apiToken, backup, sessionToken, onSessionToken }: ExplorerProps) {
   const [activeModule, setActiveModule] = useState<ModuleView>('files');
-  const [loading, setLoading] = useState(false);
+  const [pendingChatGuid, setPendingChatGuid] = useState<string | undefined>(undefined);
+  const [pendingConversationGuid, setPendingConversationGuid] = useState<string | undefined>(undefined);
   const [error, setError] = useState<string | null>(null);
-  const [chatSearchTerm, setChatSearchTerm] = useState('');
-  const [messageSearchTerm, setMessageSearchTerm] = useState('');
-  const [whatsappChats, setWhatsappChats] = useState<WhatsAppChat[]>([]);
-  const [selectedChatGuid, setSelectedChatGuid] = useState<string | null>(null);
-  const [whatsappMessages, setWhatsappMessages] = useState<WhatsAppMessage[]>([]);
-  const [displayedMessages, setDisplayedMessages] = useState<WhatsAppMessage[]>([]);
-  const [messageOffset, setMessageOffset] = useState(0);
-  const MESSAGE_BATCH_SIZE = 100;
-  const [previewImage, setPreviewImage] = useState<string | null>(null);
-  const [backupData, setBackupData] = useState<BackupSummary>(backup);
-  const messagesListRef = useRef<HTMLDivElement | null>(null);
-  const [unlockPassword, setUnlockPassword] = useState('');
-  const [unlocking, setUnlocking] = useState(false);
-  const [extracting, setExtracting] = useState(false);
-  const [statusLoaded, setStatusLoaded] = useState(false);
-  const [extractedChats, setExtractedChats] = useState<Set<string>>(new Set());
 
-  // Messages (iMessage/SMS) state
-  const [messageConversations, setMessageConversations] = useState<MessageConversation[]>([]);
-  const [selectedConversationGuid, setSelectedConversationGuid] = useState<string | null>(null);
-  const [imessageMessages, setImessageMessages] = useState<MessageItem[]>([]);
-  const [displayedImessages, setDisplayedImessages] = useState<MessageItem[]>([]);
-  const [imessageOffset, setImessageOffset] = useState(0);
-  const [conversationSearchTerm, setConversationSearchTerm] = useState('');
-  const [imessageSearchTerm, setImessageSearchTerm] = useState('');
-  const [extractedConversations, setExtractedConversations] = useState<Set<string>>(new Set());
-  const imessagesListRef = useRef<HTMLDivElement | null>(null);
+  const goToModule = (module: ModuleView) => {
+    setPendingChatGuid(undefined);
+    setPendingConversationGuid(undefined);
+    setActiveModule(module);
+  };
 
-
-  const fetchWhatsAppChats = useCallback(async () => {
-    console.log('DEBUG: fetchWhatsAppChats called');
-    setLoading(true);
-    setError(null);
-    try {
-      const response = await api.listWhatsAppChats(backup.id, apiToken);
-      console.log('DEBUG: WhatsApp chats response:', response);
-      const sortedChats = response.items.sort((a, b) => {
-        const dateA = a.last_message_at ? new Date(a.last_message_at).getTime() : 0;
-        const dateB = b.last_message_at ? new Date(b.last_message_at).getTime() : 0;
-        return dateB - dateA;
-      });
-      setWhatsappChats(sortedChats);
-      if (sortedChats.length > 0 && !selectedChatGuid) {
-        setSelectedChatGuid(sortedChats[0].chat_guid);
-      }
-    } catch (err) {
-      console.error('DEBUG: Error fetching WhatsApp chats:', err);
-      setError(err instanceof Error ? err.message : 'Failed to load WhatsApp chats');
-    } finally {
-      setLoading(false);
-    }
-  }, [backup.id, apiToken, selectedChatGuid]);
-
-  const fetchWhatsAppMessages = useCallback(async () => {
-    if (!selectedChatGuid) return;
-    setLoading(true);
-    setError(null);
-    try {
-      const response = await api.listWhatsAppMessages(backup.id, selectedChatGuid, apiToken);
-      const sortedMessages = [...response.messages].sort((a, b) => {
-        const dateA = a.sent_at ? new Date(a.sent_at).getTime() : 0;
-        const dateB = b.sent_at ? new Date(b.sent_at).getTime() : 0;
-        return dateA - dateB;
-      });
-      setWhatsappMessages(sortedMessages);
-      const initialOffset = Math.max(0, sortedMessages.length - MESSAGE_BATCH_SIZE);
-      setDisplayedMessages(sortedMessages.slice(initialOffset));
-      setMessageOffset(initialOffset);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load WhatsApp messages');
-    } finally {
-      setLoading(false);
-    }
-  }, [backup.id, selectedChatGuid, apiToken, MESSAGE_BATCH_SIZE]);
-
-  const fetchMessageConversations = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const response = await api.listMessageConversations(backup.id, apiToken);
-      const sortedConversations = response.items.sort((a, b) => {
-        const dateA = a.last_message_at ? new Date(a.last_message_at).getTime() : 0;
-        const dateB = b.last_message_at ? new Date(b.last_message_at).getTime() : 0;
-        return dateB - dateA;
-      });
-      setMessageConversations(sortedConversations);
-      if (sortedConversations.length > 0 && !selectedConversationGuid) {
-        setSelectedConversationGuid(sortedConversations[0].conversation_guid);
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load conversations');
-    } finally {
-      setLoading(false);
-    }
-  }, [backup.id, apiToken, selectedConversationGuid]);
-
-  const fetchImessageMessages = useCallback(async () => {
-    if (!selectedConversationGuid) return;
-    setLoading(true);
-    setError(null);
-    try {
-      const response = await api.listMessages(backup.id, selectedConversationGuid, apiToken);
-      const sortedMessages = [...response.messages].sort((a, b) => {
-        const dateA = a.sent_at ? new Date(a.sent_at).getTime() : 0;
-        const dateB = b.sent_at ? new Date(b.sent_at).getTime() : 0;
-        return dateA - dateB;
-      });
-      setImessageMessages(sortedMessages);
-      const initialOffset = Math.max(0, sortedMessages.length - MESSAGE_BATCH_SIZE);
-      setDisplayedImessages(sortedMessages.slice(initialOffset));
-      setImessageOffset(initialOffset);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load messages');
-    } finally {
-      setLoading(false);
-    }
-  }, [backup.id, selectedConversationGuid, apiToken, MESSAGE_BATCH_SIZE]);
-
-  const filteredMessages = useMemo(() => {
-    const term = messageSearchTerm.trim().toLowerCase();
-    if (!term) return whatsappMessages;
-    return whatsappMessages.filter((m) => {
-      const body = (m.body ?? '').toLowerCase();
-      const sender = (m.sender ?? '').toLowerCase();
-      return body.includes(term) || sender.includes(term);
-    });
-  }, [whatsappMessages, messageSearchTerm]);
-
-  const filteredImessages = useMemo(() => {
-    const term = imessageSearchTerm.trim().toLowerCase();
-    if (!term) return imessageMessages;
-    return imessageMessages.filter((m) => {
-      const text = (m.text ?? '').toLowerCase();
-      const sender = (m.sender ?? '').toLowerCase();
-      return text.includes(term) || sender.includes(term);
-    });
-  }, [imessageMessages, imessageSearchTerm]);
-
-  useEffect(() => {
-    const initialOffset = Math.max(0, filteredMessages.length - MESSAGE_BATCH_SIZE);
-    setDisplayedMessages(filteredMessages.slice(initialOffset));
-    setMessageOffset(initialOffset);
-  }, [filteredMessages, MESSAGE_BATCH_SIZE]);
-
-  useEffect(() => {
-    const initialOffset = Math.max(0, filteredImessages.length - MESSAGE_BATCH_SIZE);
-    setDisplayedImessages(filteredImessages.slice(initialOffset));
-    setImessageOffset(initialOffset);
-  }, [filteredImessages, MESSAGE_BATCH_SIZE]);
-
-  useEffect(() => {
-    if (!messagesListRef.current) return;
-    if (loading) return;
-    messagesListRef.current.scrollTop = messagesListRef.current.scrollHeight;
-  }, [selectedChatGuid, loading]);
-
-  useEffect(() => {
-    if (!imessagesListRef.current) return;
-    if (loading) return;
-    imessagesListRef.current.scrollTop = imessagesListRef.current.scrollHeight;
-  }, [selectedConversationGuid, loading]);
-
-
-  useEffect(() => {
-    if (activeModule === 'whatsapp') {
-      // Refresh backup data to get latest indexing status
-      setStatusLoaded(false);
-      api.listBackups(apiToken).then(response => {
-        const updatedBackup = response.backups.find(b => b.id === backup.id);
-        if (updatedBackup) {
-          setBackupData(updatedBackup);
-          // Only fetch chats if indexing is complete (no indexing_artifact means indexing is done)
-          const isIndexing = updatedBackup.indexing_artifact !== null && updatedBackup.indexing_artifact !== undefined;
-          if (!isIndexing) {
-            void fetchWhatsAppChats();
-          } else {
-            // Clear any existing chats during indexing
-            setWhatsappChats([]);
-            setSelectedChatGuid(null);
-          }
-        }
-        setStatusLoaded(true);
-      }).catch(err => {
-        console.error('Failed to refresh backup status:', err);
-        setStatusLoaded(true);
-      });
-    }
-  }, [activeModule, fetchWhatsAppChats, backup.id, apiToken]);
-
-  useEffect(() => {
-    if (activeModule === 'whatsapp' && selectedChatGuid) {
-      void fetchWhatsAppMessages();
-    }
-  }, [selectedChatGuid, activeModule, fetchWhatsAppMessages]);
-
-  useEffect(() => {
-    if (activeModule === 'messages') {
-      setStatusLoaded(false);
-      api.listBackups(apiToken).then(response => {
-        const updatedBackup = response.backups.find(b => b.id === backup.id);
-        if (updatedBackup) {
-          setBackupData(updatedBackup);
-          const isIndexing = updatedBackup.indexing_artifact !== null && updatedBackup.indexing_artifact !== undefined;
-          if (!isIndexing) {
-            void fetchMessageConversations();
-          } else {
-            setMessageConversations([]);
-            setSelectedConversationGuid(null);
-          }
-        }
-        setStatusLoaded(true);
-      }).catch(err => {
-        console.error('Failed to refresh backup status:', err);
-        setStatusLoaded(true);
-      });
-    }
-  }, [activeModule, fetchMessageConversations, backup.id, apiToken]);
-
-  useEffect(() => {
-    if (activeModule === 'messages' && selectedConversationGuid) {
-      void fetchImessageMessages();
-    }
-  }, [selectedConversationGuid, activeModule, fetchImessageMessages]);
-
-  // Poll for backup status updates when indexing is in progress
-  const isIndexing = backupData.indexing_artifact !== null && backupData.indexing_artifact !== undefined;
-  const isIndexingWhatsApp = backupData.indexing_artifact === 'whatsapp';
-  const isIndexingMessages = backupData.indexing_artifact === 'messages';
-  useEffect(() => {
-    console.log('DEBUG: Polling effect triggered, indexing_artifact:', backupData.indexing_artifact);
-    if (isIndexing) {
-      const interval = setInterval(async () => {
-        try {
-          console.log('DEBUG: Polling for backup status...');
-          const response = await api.listBackups(apiToken);
-          const updatedBackup = response.backups.find(b => b.id === backup.id);
-          if (updatedBackup) {
-            console.log('DEBUG: Updated backup data:', updatedBackup);
-            setBackupData(updatedBackup);
-            // If indexing completed, refresh the appropriate module
-            const isIndexing = updatedBackup.indexing_artifact !== null && updatedBackup.indexing_artifact !== undefined;
-            if (!isIndexing) {
-              if (activeModule === 'whatsapp') {
-                void fetchWhatsAppChats();
-              } else if (activeModule === 'messages') {
-                void fetchMessageConversations();
-              }
-            }
-          }
-        } catch (err) {
-          console.error('Failed to refresh backup status:', err);
-        }
-      }, 2000); // Poll every 2 seconds
-
-      return () => clearInterval(interval);
-    }
-  }, [isIndexing, backup.id, apiToken, activeModule, fetchWhatsAppChats, fetchMessageConversations]);
-
-  const loadMoreMessages = useCallback(() => {
-    if (messageOffset <= 0) return;
-    const nextOffset = Math.max(0, messageOffset - MESSAGE_BATCH_SIZE);
-    setDisplayedMessages(filteredMessages.slice(nextOffset));
-    setMessageOffset(nextOffset);
-  }, [filteredMessages, messageOffset, MESSAGE_BATCH_SIZE]);
-
-  const handleMessagesScroll = useCallback(
-    (e: React.UIEvent<HTMLDivElement>) => {
-      const element = e.currentTarget;
-      if (element.scrollTop <= 100) {
-        loadMoreMessages();
-      }
-    },
-    [loadMoreMessages],
-  );
-
-  const loadMoreImessages = useCallback(() => {
-    if (imessageOffset <= 0) return;
-    const nextOffset = Math.max(0, imessageOffset - MESSAGE_BATCH_SIZE);
-    setDisplayedImessages(filteredImessages.slice(nextOffset));
-    setImessageOffset(nextOffset);
-  }, [filteredImessages, imessageOffset, MESSAGE_BATCH_SIZE]);
-
-  const handleImessagesScroll = useCallback(
-    (e: React.UIEvent<HTMLDivElement>) => {
-      const element = e.currentTarget;
-      if (element.scrollTop <= 100) {
-        loadMoreImessages();
-      }
-    },
-    [loadMoreImessages],
-  );
-
-  const filteredChats = whatsappChats.filter(chat => {
-    if (!chatSearchTerm) return true;
-    const title = chat.title?.toLowerCase() || '';
-    const guid = chat.chat_guid?.toLowerCase() || '';
-    const search = chatSearchTerm.toLowerCase();
-    return title.includes(search) || guid.includes(search);
-  });
-
-  const filteredConversations = messageConversations.filter(conv => {
-    if (!conversationSearchTerm) return true;
-    const name = conv.display_name?.toLowerCase() || '';
-    const guid = conv.conversation_guid?.toLowerCase() || '';
-    const handles = (conv.participant_handles || []).join(' ').toLowerCase();
-    const search = conversationSearchTerm.toLowerCase();
-    return name.includes(search) || guid.includes(search) || handles.includes(search);
-  });
-
-  const selectedConversation = useMemo(() => {
-    return messageConversations.find(c => c.conversation_guid === selectedConversationGuid) || null;
-  }, [messageConversations, selectedConversationGuid]);
-
-  const isConversationExtracted = selectedConversationGuid ? extractedConversations.has(selectedConversationGuid) : false;
+  const handleSearchNavigate = (target: SearchNavTarget) => {
+    setPendingChatGuid(target.chatGuid);
+    setPendingConversationGuid(target.conversationGuid);
+    setActiveModule(target.module as ModuleView);
+  };
 
   const handleDownloadReport = async () => {
+    setError(null);
     try {
       const response = await api.downloadReport(backup.id, apiToken);
       const blob = await response.blob();
@@ -395,191 +87,6 @@ export function Explorer({ apiToken, backup, sessionToken, onSessionToken }: Exp
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Report failed');
     }
-  };
-
-  const handleSearchNavigate = (target: SearchNavTarget) => {
-    if (target.chatGuid) setSelectedChatGuid(target.chatGuid);
-    if (target.conversationGuid) setSelectedConversationGuid(target.conversationGuid);
-    setActiveModule(target.module as ModuleView);
-  };
-
-  const handleDownloadAttachment = async (relativePath: string, filename: string) => {
-    try {
-      const response = await api.downloadWhatsAppAttachment(backup.id, relativePath, apiToken, sessionToken);
-      const blob = await response.blob();
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = filename;
-      document.body.appendChild(a);
-      a.click();
-      window.URL.revokeObjectURL(url);
-      document.body.removeChild(a);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Download failed');
-    }
-  };
-
-  const handleUnlock = async () => {
-    if (!unlockPassword.trim()) {
-      setError('Password is required to unlock attachments');
-      return;
-    }
-    setUnlocking(true);
-    setError(null);
-    try {
-      const result = await api.unlockBackup(backup.id, unlockPassword, apiToken);
-      onSessionToken?.(result.session_token);
-      setUnlockPassword('');
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Unlock failed');
-    } finally {
-      setUnlocking(false);
-    }
-  };
-
-  const handleExtractWhatsAppFiles = async () => {
-    if (!sessionToken) {
-      setError('Please unlock the backup first to extract files');
-      return;
-    }
-    if (!selectedChatGuid) {
-      setError('Please select a chat first');
-      return;
-    }
-    setExtracting(true);
-    setError(null);
-    console.log('DEBUG: Extracting files for chat:', selectedChatGuid);
-    try {
-      const result = await api.extractWhatsAppFiles(backup.id, selectedChatGuid, apiToken, sessionToken);
-      console.log('DEBUG: Extraction result:', result);
-      // Mark this chat as extracted
-      setExtractedChats(prev => new Set(prev).add(selectedChatGuid));
-      const sizeMB = (result.extracted_bytes / 1024 / 1024).toFixed(2);
-      alert(`Extracted ${result.extracted_files} files (${sizeMB} MB) for this chat. Attachments will now load.`);
-      // Refresh messages to trigger re-render of attachments
-      void fetchWhatsAppMessages();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Extraction failed');
-    } finally {
-      setExtracting(false);
-    }
-  };
-
-  const handleDownloadMessageAttachment = async (relativePath: string, filename: string) => {
-    try {
-      const response = await api.downloadMessageAttachment(backup.id, relativePath, apiToken, sessionToken);
-      const blob = await response.blob();
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = filename;
-      document.body.appendChild(a);
-      a.click();
-      window.URL.revokeObjectURL(url);
-      document.body.removeChild(a);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Download failed');
-    }
-  };
-
-  const handleExtractMessageFiles = async () => {
-    if (!sessionToken) {
-      setError('Please unlock the backup first to extract files');
-      return;
-    }
-    if (!selectedConversationGuid) {
-      setError('Please select a conversation first');
-      return;
-    }
-    setExtracting(true);
-    setError(null);
-    try {
-      const result = await api.extractMessageFiles(backup.id, selectedConversationGuid, apiToken, sessionToken);
-      setExtractedConversations(prev => new Set(prev).add(selectedConversationGuid));
-      const sizeMB = (result.extracted_bytes / 1024 / 1024).toFixed(2);
-      alert(`Extracted ${result.extracted_files} files (${sizeMB} MB) for this conversation. Attachments will now load.`);
-      void fetchImessageMessages();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Extraction failed');
-    } finally {
-      setExtracting(false);
-    }
-  };
-
-  // Check if current chat has been extracted
-  const isChatExtracted = selectedChatGuid ? extractedChats.has(selectedChatGuid) : false;
-
-  const selectedChat = useMemo(() => {
-    return whatsappChats.find(c => c.chat_guid === selectedChatGuid) || null;
-  }, [whatsappChats, selectedChatGuid]);
-
-  const formatWhatsAppSender = (sender: string | null, senderName: string | null, isFromMe: boolean, chatTitle?: string | null) => {
-    if (isFromMe) return 'You';
-    
-    // Extract phone number from JID (e.g., "1234567890@s.whatsapp.net" -> "1234567890")
-    const extractPhone = (jid: string | null): string | null => {
-      if (!jid) return null;
-      const trimmed = String(jid).trim();
-      if (!trimmed) return null;
-      const optionalPrefix = 'Optional(';
-      const unwrapped =
-        trimmed.startsWith(optionalPrefix) && trimmed.endsWith(')') ? trimmed.slice(optionalPrefix.length, -1) : trimmed;
-      const atSplit = unwrapped.includes('@') ? unwrapped.split('@')[0] : unwrapped;
-      const phone = atSplit.replace(/^whatsapp:/i, '').trim();
-      return phone || null;
-    };
-    
-    // Check if a string looks like a phone number (digits, possibly with + prefix)
-    const looksLikePhone = (str: string | null): boolean => {
-      if (!str) return false;
-      // Phone numbers: optional +, then mostly digits (allow some formatting chars)
-      return /^\+?[\d\s\-().]{7,}$/.test(str.trim());
-    };
-    
-    const phone = extractPhone(sender);
-    const name = senderName?.trim() || null;
-    
-    // Prefer showing name with phone, or just one if the other is missing
-    if (name && phone && looksLikePhone(phone)) {
-      return `${name} (+${phone.replace(/^\+/, '')})`;
-    }
-    if (name) {
-      return name;
-    }
-    if (phone && looksLikePhone(phone)) {
-      return `+${phone.replace(/^\+/, '')}`;
-    }
-    // For 1:1 chats, use the chat title (partner name) as fallback
-    if (chatTitle?.trim()) {
-      if (phone && looksLikePhone(phone)) {
-        return `${chatTitle.trim()} (+${phone.replace(/^\+/, '')})`;
-      }
-      return chatTitle.trim();
-    }
-    // If we have a sender value but it doesn't look like a phone, still show it
-    // but only if we have nothing else
-    if (phone) {
-      return phone;
-    }
-    return 'Unknown';
-  };
-
-  const waLoadBlob = useCallback(
-    (rp: string) => api.downloadWhatsAppAttachment(backup.id, rp, apiToken, sessionToken).then((r) => r.blob()),
-    [backup.id, apiToken, sessionToken],
-  );
-
-  const msgLoadBlob = useCallback(
-    (rp: string) => api.downloadMessageAttachment(backup.id, rp, apiToken, sessionToken).then((r) => r.blob()),
-    [backup.id, apiToken, sessionToken],
-  );
-
-  const formatMessageSender = (sender: string | null, isFromMe: boolean, conversationName?: string | null) => {
-    if (isFromMe) return 'You';
-    if (sender) return sender;
-    if (conversationName) return conversationName;
-    return 'Unknown';
   };
 
   return (
@@ -618,29 +125,18 @@ export function Explorer({ apiToken, backup, sessionToken, onSessionToken }: Exp
               </div>
             )}
           </div>
+          {error && <div className="error-message">{error}</div>}
         </div>
       </div>
 
       <div className="explorer-content">
-        {extracting && (
-          <div className="extraction-overlay">
-            <div className="extraction-overlay-content">
-              <div className="extraction-spinner"></div>
-              <div>Extracting attachments...</div>
-              <div style={{ fontSize: '0.85rem', opacity: 0.7, marginTop: '0.5rem' }}>
-                Please wait, do not navigate away
-              </div>
-            </div>
-          </div>
-        )}
         <div className="module-selector">
           <div className="module-tabs">
             {MODULES.map((module) => (
               <button
                 key={module.id}
                 className={`module-tab ${activeModule === module.id ? 'active' : ''}`}
-                onClick={() => setActiveModule(module.id)}
-                disabled={extracting}
+                onClick={() => goToModule(module.id)}
               >
                 <span className="module-label">{module.label}</span>
                 <span className="module-description">{module.description}</span>
@@ -652,421 +148,51 @@ export function Explorer({ apiToken, backup, sessionToken, onSessionToken }: Exp
         <div className="module-content">
           {activeModule === 'files' && <FilesModule apiToken={apiToken} backupId={backup.id} />}
 
-{activeModule === 'whatsapp' && (
-          <div className="whatsapp-module">
-            <div className="whatsapp-container">
-              <div className="whatsapp-chats-list">
-                <div className="whatsapp-header">
-                  <h3>WhatsApp Chats</h3>
-                </div>
-                <div style={{ marginBottom: '1rem' }}>
-                  <input
-                    type="text"
-                    placeholder="Search chats..."
-                    value={chatSearchTerm}
-                    onChange={(e) => setChatSearchTerm(e.target.value)}
-                    className="search-input"
-                    disabled={extracting}
-                  />
-                </div>
-                {!statusLoaded ? (
-                  <div className="loading">Loading...</div>
-                ) : isIndexingWhatsApp ? (
-                  <div className="loading">
-                    <div>
-                      <div>Indexing WhatsApp...</div>
-                      {backupData.indexing_progress !== undefined && backupData.indexing_progress !== null && backupData.indexing_total ? (
-                        <>
-                          <div className="progress-bar">
-                            <div 
-                              className="progress-fill" 
-                              style={{ width: `${(backupData.indexing_progress / backupData.indexing_total) * 100}%` }}
-                            />
-                            <div className="progress-text">
-                              {Math.round((backupData.indexing_progress / backupData.indexing_total) * 100)}%
-                            </div>
-                          </div>
-                          <div className="progress-subtext">
-                            {backupData.indexing_progress}/{backupData.indexing_total}
-                          </div>
-                        </>
-                      ) : null}
-                      <div style={{ fontSize: '0.85rem', marginTop: '0.5rem', opacity: 0.7 }}>
-                        Please wait while WhatsApp chats are being indexed...
-                      </div>
-                    </div>
-                  </div>
-                ) : loading && !whatsappChats.length ? (
-                  <div className="loading">Loading chats...</div>
-                ) : whatsappChats.length === 0 ? (
-                  <div className="no-results">
-                    <div>
-                      <div>No WhatsApp chats found</div>
-                      <div style={{ fontSize: '0.85rem', marginTop: '0.5rem', opacity: 0.7 }}>
-                        Indexing completed but no WhatsApp data was found in this backup.
-                      </div>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="chats-list scrollable">
-                    {filteredChats.map((chat) => (
-                      <button
-                        key={chat.chat_guid}
-                        className={`chat-item ${selectedChatGuid === chat.chat_guid ? 'active' : ''}`}
-                        onClick={() => setSelectedChatGuid(chat.chat_guid)}
-                        disabled={extracting}
-                      >
-                        <div className="chat-title">{chat.title || chat.chat_guid}</div>
-                        {chat.last_message_at && (
-                          <div className="chat-date">
-                            {new Date(chat.last_message_at).toLocaleDateString()}
-                          </div>
-                        )}
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
+          {activeModule === 'whatsapp' && (
+            <WhatsAppModule
+              apiToken={apiToken}
+              backup={backup}
+              sessionToken={sessionToken}
+              onSessionToken={onSessionToken}
+              initialSelectedGuid={pendingChatGuid}
+            />
+          )}
 
-              <div className="whatsapp-messages">
-                {selectedChatGuid ? (
-                  <>
-                    <div className="whatsapp-header">
-                      <h3>
-                        {selectedChat?.title || 'Chat'}
-                      </h3>
-                      <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-                        <input
-                          type="text"
-                          placeholder="Search messages..."
-                          value={messageSearchTerm}
-                          onChange={(e) => setMessageSearchTerm(e.target.value)}
-                          className="search-input search-box-wide"
-                          disabled={extracting}
-                        />
-                        {isChatExtracted ? (
-                          <button
-                            className="download-btn extracted"
-                            disabled
-                            title="Files already extracted for this chat"
-                          >
-                            ✓ Files Extracted
-                          </button>
-                        ) : (
-                          <button
-                            className={`download-btn ${extracting ? 'extracting' : ''}`}
-                            onClick={handleExtractWhatsAppFiles}
-                            disabled={extracting || !sessionToken}
-                            title={!sessionToken ? 'Unlock backup first' : 'Extract files for this chat'}
-                          >
-                            {extracting ? 'Extracting...' : 'Extract Chat Files'}
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                    {!sessionToken && (
-                      <div className="error-message">
-                        <div style={{ marginBottom: '0.75rem' }}>
-                          Attachments require an unlocked session. Enter the backup password to unlock downloads.
-                        </div>
-                        <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-                          <input
-                            type="password"
-                            placeholder="Backup password"
-                            value={unlockPassword}
-                            onChange={(e) => setUnlockPassword(e.target.value)}
-                            className="search-input"
-                            disabled={unlocking || extracting}
-                          />
-                          <button className="download-btn" onClick={handleUnlock} disabled={unlocking || extracting}>
-                            {unlocking ? 'Unlocking...' : 'Unlock Attachments'}
-                          </button>
-                        </div>
-                      </div>
-                    )}
-                    {loading && <div className="loading">Loading messages...</div>}
-                    {error && <div className="error-message">{error}</div>}
-                    {!loading && !error && (
-                      <div
-                        ref={messagesListRef}
-                        className="messages-list scrollable"
-                        onScroll={handleMessagesScroll}
-                      >
-                        {displayedMessages.map((message, index) => (
-                          <div
-                            key={message.message_id || index}
-                            className={`message ${message.is_from_me ? 'from-me' : 'from-other'}`}
-                          >
-                            {!message.is_from_me && (
-                              <div className="message-sender">
-                                {formatWhatsAppSender(message.sender, message.sender_name, message.is_from_me, selectedChat?.title)}
-                              </div>
-                            )}
-                            {message.body && <div className="message-body">{message.body}</div>}
-                            {message.attachments && message.attachments.length > 0 && (
-                              <div className="message-attachments">
-                                {message.attachments.map((attachment: WhatsAppAttachment, attIndex: number) => (
-                                  <div
-                                    key={attachment.relative_path ?? attachment.file_id ?? String(attIndex)}
-                                    className="attachment-inline"
-                                  >
-                                    <Attachment
-                                      attachment={attachment}
-                                      extracted={isChatExtracted}
-                                      loadBlob={waLoadBlob}
-                                      onPreview={setPreviewImage}
-                                      onDownload={handleDownloadAttachment}
-                                    />
-                                  </div>
-                                ))}
-                              </div>
-                            )}
-                            <div className="message-time">
-                              {message.sent_at && new Date(message.sent_at).toLocaleString()}
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </>
-                ) : (
-                  <div className="no-results">
-                    Select a chat to view messages
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-        )}
+          {activeModule === 'messages' && (
+            <MessagesModule
+              apiToken={apiToken}
+              backup={backup}
+              sessionToken={sessionToken}
+              onSessionToken={onSessionToken}
+              initialSelectedGuid={pendingConversationGuid}
+            />
+          )}
 
-        {activeModule === 'messages' && (
-          <div className="whatsapp-module">
-            <div className="whatsapp-container">
-              <div className="whatsapp-chats-list">
-                <div className="whatsapp-header">
-                  <h3>Conversations</h3>
-                </div>
-                <div style={{ marginBottom: '1rem' }}>
-                  <input
-                    type="text"
-                    placeholder="Search conversations..."
-                    value={conversationSearchTerm}
-                    onChange={(e) => setConversationSearchTerm(e.target.value)}
-                    className="search-input"
-                    disabled={extracting}
-                  />
-                </div>
-                {!statusLoaded ? (
-                  <div className="loading">Loading...</div>
-                ) : isIndexingMessages ? (
-                  <div className="loading">
-                    <div>
-                      <div>Indexing messages...</div>
-                      {backupData.indexing_progress !== undefined && backupData.indexing_progress !== null && backupData.indexing_total ? (
-                        <>
-                          <div className="progress-bar">
-                            <div 
-                              className="progress-fill" 
-                              style={{ width: `${(backupData.indexing_progress / backupData.indexing_total) * 100}%` }}
-                            />
-                            <div className="progress-text">
-                              {Math.round((backupData.indexing_progress / backupData.indexing_total) * 100)}%
-                            </div>
-                          </div>
-                          <div className="progress-subtext">
-                            {backupData.indexing_progress}/{backupData.indexing_total}
-                          </div>
-                        </>
-                      ) : null}
-                      <div style={{ fontSize: '0.85rem', marginTop: '0.5rem', opacity: 0.7 }}>
-                        Please wait while messages are being indexed...
-                      </div>
-                    </div>
-                  </div>
-                ) : loading && !messageConversations.length ? (
-                  <div className="loading">Loading conversations...</div>
-                ) : messageConversations.length === 0 ? (
-                  <div className="no-results">
-                    <div>
-                      <div>No conversations found</div>
-                      <div style={{ fontSize: '0.85rem', marginTop: '0.5rem', opacity: 0.7 }}>
-                        Indexing completed but no iMessage/SMS data was found in this backup.
-                      </div>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="chats-list scrollable">
-                    {filteredConversations.map((conv) => (
-                      <button
-                        key={conv.conversation_guid}
-                        className={`chat-item ${selectedConversationGuid === conv.conversation_guid ? 'active' : ''}`}
-                        onClick={() => setSelectedConversationGuid(conv.conversation_guid)}
-                        disabled={extracting}
-                      >
-                        <div className="chat-title">
-                          {conv.display_name || conv.participant_handles?.join(', ') || conv.conversation_guid}
-                        </div>
-                        <div className="chat-subtitle">
-                          {conv.service === 'iMessage' ? '💬' : '📱'} {conv.service || 'SMS'}
-                        </div>
-                        {conv.last_message_at && (
-                          <div className="chat-date">
-                            {new Date(conv.last_message_at).toLocaleDateString()}
-                          </div>
-                        )}
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
+          {activeModule === 'photos' && (
+            <PhotosTab apiToken={apiToken} backupId={backup.id} sessionToken={sessionToken} />
+          )}
 
-              <div className="whatsapp-messages">
-                {selectedConversationGuid ? (
-                  <>
-                    <div className="whatsapp-header">
-                      <h3>
-                        {selectedConversation?.display_name || selectedConversation?.participant_handles?.join(', ') || 'Conversation'}
-                      </h3>
-                      <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-                        <input
-                          type="text"
-                          placeholder="Search messages..."
-                          value={imessageSearchTerm}
-                          onChange={(e) => setImessageSearchTerm(e.target.value)}
-                          className="search-input search-box-wide"
-                          disabled={extracting}
-                        />
-                        {isConversationExtracted ? (
-                          <button
-                            className="download-btn extracted"
-                            disabled
-                            title="Files already extracted for this conversation"
-                          >
-                            ✓ Files Extracted
-                          </button>
-                        ) : (
-                          <button
-                            className={`download-btn ${extracting ? 'extracting' : ''}`}
-                            onClick={handleExtractMessageFiles}
-                            disabled={extracting || !sessionToken}
-                            title={!sessionToken ? 'Unlock backup first' : 'Extract files for this conversation'}
-                          >
-                            {extracting ? 'Extracting...' : 'Extract Files'}
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                    {!sessionToken && (
-                      <div className="error-message">
-                        <div style={{ marginBottom: '0.75rem' }}>
-                          Attachments require an unlocked session. Enter the backup password to unlock downloads.
-                        </div>
-                        <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-                          <input
-                            type="password"
-                            placeholder="Backup password"
-                            value={unlockPassword}
-                            onChange={(e) => setUnlockPassword(e.target.value)}
-                            className="search-input"
-                            disabled={unlocking || extracting}
-                          />
-                          <button className="download-btn" onClick={handleUnlock} disabled={unlocking || extracting}>
-                            {unlocking ? 'Unlocking...' : 'Unlock Attachments'}
-                          </button>
-                        </div>
-                      </div>
-                    )}
-                    {loading && <div className="loading">Loading messages...</div>}
-                    {error && <div className="error-message">{error}</div>}
-                    {!loading && !error && (
-                      <div
-                        ref={imessagesListRef}
-                        className="messages-list scrollable"
-                        onScroll={handleImessagesScroll}
-                      >
-                        {displayedImessages.map((message, index) => (
-                          <div
-                            key={message.message_guid || index}
-                            className={`message ${message.is_from_me ? 'from-me' : 'from-other'}`}
-                          >
-                            {!message.is_from_me && (
-                              <div className="message-sender">
-                                {formatMessageSender(message.sender, message.is_from_me, selectedConversation?.display_name)}
-                              </div>
-                            )}
-                            {message.text && <div className="message-body">{message.text}</div>}
-                            {message.attachments && message.attachments.length > 0 && (
-                              <div className="message-attachments">
-                                {message.attachments.map((attachment: MessageAttachment, attIndex: number) => (
-                                  <div
-                                    key={attachment.relative_path ?? attachment.file_id ?? String(attIndex)}
-                                    className="attachment-inline"
-                                  >
-                                    <Attachment
-                                      attachment={attachment}
-                                      extracted={isConversationExtracted}
-                                      loadBlob={msgLoadBlob}
-                                      onPreview={setPreviewImage}
-                                      onDownload={handleDownloadMessageAttachment}
-                                    />
-                                  </div>
-                                ))}
-                              </div>
-                            )}
-                            <div className="message-time">
-                              {message.sent_at && new Date(message.sent_at).toLocaleString()}
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </>
-                ) : (
-                  <div className="no-results">
-                    Select a conversation to view messages
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-        )}
+          {activeModule === 'notes' && <NotesTab apiToken={apiToken} backupId={backup.id} />}
 
-        {activeModule === 'photos' && (
-          <PhotosTab apiToken={apiToken} backupId={backup.id} sessionToken={sessionToken} />
-        )}
+          {activeModule === 'calendar' && <CalendarTab apiToken={apiToken} backupId={backup.id} />}
 
-        {activeModule === 'notes' && <NotesTab apiToken={apiToken} backupId={backup.id} />}
+          {activeModule === 'contacts' && <ContactsTab apiToken={apiToken} backupId={backup.id} />}
 
-        {activeModule === 'calendar' && <CalendarTab apiToken={apiToken} backupId={backup.id} />}
+          {activeModule === 'calls' && <CallsTab apiToken={apiToken} backupId={backup.id} />}
 
-        {activeModule === 'contacts' && <ContactsTab apiToken={apiToken} backupId={backup.id} />}
+          {activeModule === 'safari' && <SafariTab apiToken={apiToken} backupId={backup.id} />}
 
-        {activeModule === 'calls' && <CallsTab apiToken={apiToken} backupId={backup.id} />}
+          {activeModule === 'locations' && <LocationsTab apiToken={apiToken} backupId={backup.id} />}
 
-        {activeModule === 'safari' && <SafariTab apiToken={apiToken} backupId={backup.id} />}
+          {activeModule === 'voicemail' && <VoicemailTab apiToken={apiToken} backupId={backup.id} />}
 
-        {activeModule === 'locations' && <LocationsTab apiToken={apiToken} backupId={backup.id} />}
+          {activeModule === 'timeline' && <TimelineTab apiToken={apiToken} backupId={backup.id} />}
 
-        {activeModule === 'voicemail' && <VoicemailTab apiToken={apiToken} backupId={backup.id} />}
-
-        {activeModule === 'timeline' && <TimelineTab apiToken={apiToken} backupId={backup.id} />}
-
-        {activeModule === 'search' && (
-          <SearchTab apiToken={apiToken} backupId={backup.id} onNavigate={handleSearchNavigate} />
-        )}
-      </div>
-      </div>
-
-      {previewImage && (
-        <div className="image-preview-modal" onClick={() => setPreviewImage(null)}>
-          <div className="image-preview-content" onClick={(e: React.MouseEvent) => e.stopPropagation()}>
-            <button className="image-preview-close" onClick={() => setPreviewImage(null)}>
-              ✕
-            </button>
-            <img src={previewImage || ''} alt="Preview" />
-          </div>
+          {activeModule === 'search' && (
+            <SearchTab apiToken={apiToken} backupId={backup.id} onNavigate={handleSearchNavigate} />
+          )}
         </div>
-      )}
+      </div>
     </div>
   );
 }
