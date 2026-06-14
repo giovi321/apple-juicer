@@ -371,9 +371,7 @@ export const api = {
     return urlString + `&token=${encodeURIComponent(token)}`;
   },
   extractWhatsAppFiles: (backupId: string, chatGuid: string, token: string, sessionToken: string) => {
-    console.log('API: extractWhatsAppFiles called with chatGuid:', chatGuid);
     const url = `/backups/${backupId}/extract/whatsapp/${encodeURIComponent(chatGuid)}`;
-    console.log('API: Full URL path:', url);
     return request<{ extracted_files: number; extracted_bytes: number }>(
       url,
       'POST',

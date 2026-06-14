@@ -13,6 +13,7 @@ import { LocationsTab } from './modules/LocationsTab';
 import { VoicemailTab } from './modules/VoicemailTab';
 import { TimelineTab } from './modules/TimelineTab';
 import { SearchTab, type SearchNavTarget } from './modules/SearchTab';
+import { ErrorBoundary } from '../components/ErrorBoundary';
 import '../styles/Explorer.css';
 
 interface ExplorerProps {
@@ -146,6 +147,7 @@ export function Explorer({ apiToken, backup, sessionToken, onSessionToken }: Exp
         </div>
 
         <div className="module-content">
+          <ErrorBoundary resetKey={activeModule} label={MODULES.find((m) => m.id === activeModule)?.label}>
           {activeModule === 'files' && <FilesModule apiToken={apiToken} backupId={backup.id} />}
 
           {activeModule === 'whatsapp' && (
@@ -191,6 +193,7 @@ export function Explorer({ apiToken, backup, sessionToken, onSessionToken }: Exp
           {activeModule === 'search' && (
             <SearchTab apiToken={apiToken} backupId={backup.id} onNavigate={handleSearchNavigate} />
           )}
+          </ErrorBoundary>
         </div>
       </div>
     </div>

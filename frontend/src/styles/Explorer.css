@@ -223,6 +223,30 @@
   border-left: 4px solid #ff6b6b;
 }
 
+.error-boundary {
+  padding: 1.5rem;
+  margin: 1rem;
+  background: rgba(220, 53, 69, 0.15);
+  border-radius: 4px;
+  border-left: 4px solid #ff6b6b;
+}
+
+.error-boundary h3 {
+  margin: 0 0 0.75rem;
+  color: #ff6b6b;
+}
+
+.error-boundary-detail {
+  margin: 0 0 1rem;
+  padding: 0.75rem;
+  background: rgba(0, 0, 0, 0.25);
+  border-radius: 4px;
+  color: #ddd;
+  font-size: 0.85rem;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
 .loading,
 .no-results {
   padding: 2rem;
