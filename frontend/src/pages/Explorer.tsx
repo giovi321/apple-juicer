@@ -19,6 +19,7 @@ import { SafariTab } from './modules/SafariTab';
 import { LocationsTab } from './modules/LocationsTab';
 import { VoicemailTab } from './modules/VoicemailTab';
 import { SearchTab } from './modules/SearchTab';
+import { Attachment } from './modules/Attachment';
 import '../styles/Explorer.css';
 
 interface ExplorerProps {
@@ -458,18 +459,6 @@ export function Explorer({ apiToken, backup, sessionToken, onSessionToken }: Exp
     }
   };
 
-  const handlePreviewImage = async (relativePath: string, mimeType: string | null) => {
-    if (!mimeType?.startsWith('image/')) return;
-    try {
-      const response = await api.downloadWhatsAppAttachment(backup.id, relativePath, apiToken, sessionToken);
-      const blob = await response.blob();
-      const url = window.URL.createObjectURL(blob);
-      setPreviewImage(url);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Preview failed');
-    }
-  };
-
   const handleUnlock = async () => {
     if (!unlockPassword.trim()) {
       setError('Password is required to unlock attachments');
@@ -615,558 +604,21 @@ export function Explorer({ apiToken, backup, sessionToken, onSessionToken }: Exp
     return 'Unknown';
   };
 
-  const guessAttachmentFilename = (attachment: WhatsAppAttachment) => {
-    const rp = attachment.relative_path ?? '';
-    const last = rp.split('/').filter(Boolean).pop();
-    return last || attachment.file_id || 'attachment';
-  };
+  const waLoadBlob = useCallback(
+    (rp: string) => api.downloadWhatsAppAttachment(backup.id, rp, apiToken, sessionToken).then((r) => r.blob()),
+    [backup.id, apiToken, sessionToken],
+  );
 
-  const guessMessageAttachmentFilename = (attachment: MessageAttachment) => {
-    const rp = attachment.relative_path ?? '';
-    const last = rp.split('/').filter(Boolean).pop();
-    return last || attachment.file_id || 'attachment';
-  };
+  const msgLoadBlob = useCallback(
+    (rp: string) => api.downloadMessageAttachment(backup.id, rp, apiToken, sessionToken).then((r) => r.blob()),
+    [backup.id, apiToken, sessionToken],
+  );
 
   const formatMessageSender = (sender: string | null, isFromMe: boolean, conversationName?: string | null) => {
     if (isFromMe) return 'You';
     if (sender) return sender;
     if (conversationName) return conversationName;
     return 'Unknown';
-  };
-
-  const AttachmentImage = ({
-    relativePath,
-    filename,
-    mimeType,
-  }: {
-    relativePath: string;
-    filename: string;
-    mimeType: string | null;
-  }) => {
-    const [imageUrl, setImageUrl] = useState<string | null>(null);
-    const [loading, setLoading] = useState(true);
-    const [error, setError] = useState<string | null>(null);
-
-    useEffect(() => {
-      let isMounted = true;
-      const loadImage = async () => {
-        console.log('Loading attachment:', relativePath);
-        try {
-          const response = await api.downloadWhatsAppAttachment(backup.id, relativePath, apiToken, sessionToken);
-          console.log('Got response:', response.status);
-          const blob = await response.blob();
-          console.log('Got blob, size:', blob.size, 'type:', blob.type);
-          const url = window.URL.createObjectURL(blob);
-          if (isMounted) {
-            setImageUrl(url);
-            setLoading(false);
-            setError(null);
-          }
-        } catch (err) {
-          console.error('Failed to load image:', err);
-          if (isMounted) {
-            setLoading(false);
-            setError(err instanceof Error ? err.message : 'Failed to load');
-          }
-        }
-      };
-      loadImage();
-      return () => {
-        isMounted = false;
-        if (imageUrl) window.URL.revokeObjectURL(imageUrl);
-      };
-    }, [relativePath, backup.id, apiToken, sessionToken]);
-
-    if (loading) {
-      return <div className="attachment-loading">Loading image...</div>;
-    }
-
-    if (error || !imageUrl) {
-      return <div className="attachment-error">Failed to load image: {error}</div>;
-    }
-
-    return (
-      <div className="attachment-image-wrapper">
-        <img 
-          src={imageUrl} 
-          alt={filename}
-          className="attachment-image"
-          onClick={() => handlePreviewImage(relativePath, mimeType)}
-        />
-        <button
-          className="attachment-download-overlay"
-          onClick={(e) => {
-            e.stopPropagation();
-            handleDownloadAttachment(relativePath, filename);
-          }}
-          title="Download"
-        >
-          ⬇️
-        </button>
-      </div>
-    );
-  };
-
-  const AttachmentMedia = ({
-    relativePath,
-    mimeType,
-    kind,
-    filename,
-  }: {
-    relativePath: string;
-    mimeType: string | null;
-    kind: 'video' | 'audio';
-    filename: string;
-  }) => {
-    const [url, setUrl] = useState<string | null>(null);
-    const [loading, setLoading] = useState(true);
-    const [error, setError] = useState<string | null>(null);
-    const audioRef = useRef<HTMLAudioElement | null>(null);
-    const [isPlaying, setIsPlaying] = useState(false);
-    const [duration, setDuration] = useState(0);
-    const [currentTime, setCurrentTime] = useState(0);
-
-    useEffect(() => {
-      let isMounted = true;
-      let objectUrl: string | null = null;
-      const load = async () => {
-        try {
-          const response = await api.downloadWhatsAppAttachment(backup.id, relativePath, apiToken, sessionToken);
-          const blob = await response.blob();
-          objectUrl = window.URL.createObjectURL(blob);
-          if (isMounted) {
-            setUrl(objectUrl);
-            setLoading(false);
-          } else {
-            window.URL.revokeObjectURL(objectUrl);
-          }
-        } catch (e) {
-          if (isMounted) {
-            setLoading(false);
-            setError(e instanceof Error ? e.message : 'Failed to load media');
-          }
-        }
-      };
-      load();
-      return () => {
-        isMounted = false;
-        if (objectUrl) window.URL.revokeObjectURL(objectUrl);
-      };
-    }, [relativePath, backup.id, apiToken, sessionToken]);
-
-    useEffect(() => {
-      if (kind !== 'audio') return;
-      const el = audioRef.current;
-      if (!el) return;
-
-      const onLoaded = () => setDuration(Number.isFinite(el.duration) ? el.duration : 0);
-      const onTime = () => setCurrentTime(el.currentTime || 0);
-      const onEnded = () => setIsPlaying(false);
-      el.addEventListener('loadedmetadata', onLoaded);
-      el.addEventListener('timeupdate', onTime);
-      el.addEventListener('ended', onEnded);
-      return () => {
-        el.removeEventListener('loadedmetadata', onLoaded);
-        el.removeEventListener('timeupdate', onTime);
-        el.removeEventListener('ended', onEnded);
-      };
-    }, [kind, url]);
-
-    const toggleAudio = async () => {
-      const el = audioRef.current;
-      if (!el) return;
-      if (el.paused) {
-        await el.play();
-        setIsPlaying(true);
-      } else {
-        el.pause();
-        setIsPlaying(false);
-      }
-    };
-
-    const seekAudio = (value: number) => {
-      const el = audioRef.current;
-      if (!el) return;
-      el.currentTime = value;
-      setCurrentTime(value);
-    };
-
-    if (loading) return <div className="attachment-loading">Loading media...</div>;
-    if (error || !url) return <div className="attachment-error">Failed to load media: {error}</div>;
-
-    if (kind === 'video') {
-      return (
-        <div className="attachment-video-wrapper">
-          <video controls className="attachment-video">
-            <source src={url} type={mimeType ?? undefined} />
-          </video>
-          <button className="attachment-download-overlay" onClick={() => handleDownloadAttachment(relativePath, filename)}>
-            ⬇️
-          </button>
-        </div>
-      );
-    }
-
-    return (
-      <div className="attachment-audio-wrapper">
-        <button className="audio-mini-btn" onClick={toggleAudio}>
-          {isPlaying ? 'Pause' : 'Play'}
-        </button>
-        <input
-          className="audio-mini-range"
-          type="range"
-          min={0}
-          max={duration || 0}
-          step={0.01}
-          value={Math.min(currentTime, duration || 0)}
-          onChange={(e) => seekAudio(Number(e.target.value))}
-        />
-        <audio ref={audioRef} preload="metadata" src={url} />
-        <button className="attachment-download-btn-small" onClick={() => handleDownloadAttachment(relativePath, filename)}>
-          ⬇️
-        </button>
-      </div>
-    );
-  };
-
-  const MessageAttachmentImage = ({
-    relativePath,
-    filename,
-  }: {
-    relativePath: string;
-    filename: string;
-    mimeType?: string | null;
-  }) => {
-    const [imageUrl, setImageUrl] = useState<string | null>(null);
-    const [loading, setLoading] = useState(true);
-    const [error, setError] = useState<string | null>(null);
-
-    useEffect(() => {
-      let isMounted = true;
-      const loadImage = async () => {
-        try {
-          const response = await api.downloadMessageAttachment(backup.id, relativePath, apiToken, sessionToken);
-          const blob = await response.blob();
-          const url = window.URL.createObjectURL(blob);
-          if (isMounted) {
-            setImageUrl(url);
-            setLoading(false);
-            setError(null);
-          }
-        } catch (err) {
-          if (isMounted) {
-            setLoading(false);
-            setError(err instanceof Error ? err.message : 'Failed to load');
-          }
-        }
-      };
-      loadImage();
-      return () => {
-        isMounted = false;
-        if (imageUrl) window.URL.revokeObjectURL(imageUrl);
-      };
-    }, [relativePath, backup.id, apiToken, sessionToken]);
-
-    if (loading) {
-      return <div className="attachment-loading">Loading image...</div>;
-    }
-
-    if (error || !imageUrl) {
-      return <div className="attachment-error">Failed to load image: {error}</div>;
-    }
-
-    return (
-      <div className="attachment-image-wrapper">
-        <img 
-          src={imageUrl} 
-          alt={filename}
-          className="attachment-image"
-          onClick={() => {
-            const url = imageUrl;
-            setPreviewImage(url);
-          }}
-        />
-        <button
-          className="attachment-download-overlay"
-          onClick={(e) => {
-            e.stopPropagation();
-            handleDownloadMessageAttachment(relativePath, filename);
-          }}
-          title="Download"
-        >
-          ⬇️
-        </button>
-      </div>
-    );
-  };
-
-  const MessageAttachmentMedia = ({
-    relativePath,
-    mimeType,
-    kind,
-    filename,
-  }: {
-    relativePath: string;
-    mimeType: string | null;
-    kind: 'video' | 'audio';
-    filename: string;
-  }) => {
-    const [url, setUrl] = useState<string | null>(null);
-    const [loading, setLoading] = useState(true);
-    const [error, setError] = useState<string | null>(null);
-    const audioRef = useRef<HTMLAudioElement | null>(null);
-    const [isPlaying, setIsPlaying] = useState(false);
-    const [duration, setDuration] = useState(0);
-    const [currentTime, setCurrentTime] = useState(0);
-
-    useEffect(() => {
-      let isMounted = true;
-      let objectUrl: string | null = null;
-      const load = async () => {
-        try {
-          const response = await api.downloadMessageAttachment(backup.id, relativePath, apiToken, sessionToken);
-          const blob = await response.blob();
-          objectUrl = window.URL.createObjectURL(blob);
-          if (isMounted) {
-            setUrl(objectUrl);
-            setLoading(false);
-          } else {
-            window.URL.revokeObjectURL(objectUrl);
-          }
-        } catch (e) {
-          if (isMounted) {
-            setLoading(false);
-            setError(e instanceof Error ? e.message : 'Failed to load media');
-          }
-        }
-      };
-      load();
-      return () => {
-        isMounted = false;
-        if (objectUrl) window.URL.revokeObjectURL(objectUrl);
-      };
-    }, [relativePath, backup.id, apiToken, sessionToken]);
-
-    useEffect(() => {
-      if (kind !== 'audio') return;
-      const el = audioRef.current;
-      if (!el) return;
-
-      const onLoaded = () => setDuration(Number.isFinite(el.duration) ? el.duration : 0);
-      const onTime = () => setCurrentTime(el.currentTime || 0);
-      const onEnded = () => setIsPlaying(false);
-      el.addEventListener('loadedmetadata', onLoaded);
-      el.addEventListener('timeupdate', onTime);
-      el.addEventListener('ended', onEnded);
-      return () => {
-        el.removeEventListener('loadedmetadata', onLoaded);
-        el.removeEventListener('timeupdate', onTime);
-        el.removeEventListener('ended', onEnded);
-      };
-    }, [kind, url]);
-
-    const toggleAudio = async () => {
-      const el = audioRef.current;
-      if (!el) return;
-      if (el.paused) {
-        await el.play();
-        setIsPlaying(true);
-      } else {
-        el.pause();
-        setIsPlaying(false);
-      }
-    };
-
-    const seekAudio = (value: number) => {
-      const el = audioRef.current;
-      if (!el) return;
-      el.currentTime = value;
-      setCurrentTime(value);
-    };
-
-    if (loading) return <div className="attachment-loading">Loading media...</div>;
-    if (error || !url) return <div className="attachment-error">Failed to load media: {error}</div>;
-
-    if (kind === 'video') {
-      return (
-        <div className="attachment-video-wrapper">
-          <video controls className="attachment-video">
-            <source src={url} type={mimeType ?? undefined} />
-          </video>
-          <button className="attachment-download-overlay" onClick={() => handleDownloadMessageAttachment(relativePath, filename)}>
-            ⬇️
-          </button>
-        </div>
-      );
-    }
-
-    return (
-      <div className="attachment-audio-wrapper">
-        <button className="audio-mini-btn" onClick={toggleAudio}>
-          {isPlaying ? 'Pause' : 'Play'}
-        </button>
-        <input
-          className="audio-mini-range"
-          type="range"
-          min={0}
-          max={duration || 0}
-          step={0.01}
-          value={Math.min(currentTime, duration || 0)}
-          onChange={(e) => seekAudio(Number(e.target.value))}
-        />
-        <audio ref={audioRef} preload="metadata" src={url} />
-        <button className="attachment-download-btn-small" onClick={() => handleDownloadMessageAttachment(relativePath, filename)}>
-          ⬇️
-        </button>
-      </div>
-    );
-  };
-
-  const renderMessageAttachment = (attachment: MessageAttachment) => {
-    if (!attachment.relative_path) {
-      return null;
-    }
-    const filename = guessMessageAttachmentFilename(attachment);
-
-    if (!isConversationExtracted) {
-      const icon = attachment.mime_type?.startsWith('image/') ? '🖼️' :
-                   attachment.mime_type?.startsWith('video/') ? '🎬' :
-                   attachment.mime_type?.startsWith('audio/') ? '🎵' : '📄';
-      return (
-        <div className="attachment-placeholder">
-          <span className="attachment-icon">{icon}</span>
-          <span className="attachment-name">{filename}</span>
-          <span className="attachment-size">
-            {attachment.size_bytes ? `${(attachment.size_bytes / 1024 / 1024).toFixed(1)} MB` : ''}
-          </span>
-          <span className="attachment-hint">Extract files to view</span>
-        </div>
-      );
-    }
-
-    if (attachment.mime_type?.startsWith('image/')) {
-      return (
-        <div className="attachment-image-wrapper">
-          <MessageAttachmentImage
-            relativePath={attachment.relative_path}
-            filename={filename}
-            mimeType={attachment.mime_type}
-          />
-        </div>
-      );
-    }
-
-    if (attachment.mime_type?.startsWith('video/')) {
-      return (
-        <MessageAttachmentMedia
-          relativePath={attachment.relative_path}
-          mimeType={attachment.mime_type}
-          kind="video"
-          filename={filename}
-        />
-      );
-    }
-
-    if (attachment.mime_type?.startsWith('audio/')) {
-      return (
-        <MessageAttachmentMedia
-          relativePath={attachment.relative_path}
-          mimeType={attachment.mime_type}
-          kind="audio"
-          filename={filename}
-        />
-      );
-    }
-
-    return (
-      <div className="attachment-file">
-        <span className="attachment-icon">📄</span>
-        <span className="attachment-name">{filename}</span>
-        <span className="attachment-size">
-          {attachment.size_bytes ? `${(attachment.size_bytes / 1024 / 1024).toFixed(1)} MB` : ''}
-        </span>
-        <button
-          className="attachment-download-btn-small"
-          onClick={() => handleDownloadMessageAttachment(attachment.relative_path ?? '', filename)}
-        >
-          ⬇️
-        </button>
-      </div>
-    );
-  };
-
-  const renderAttachment = (attachment: WhatsAppAttachment) => {
-    if (!attachment.relative_path) {
-      return null;
-    }
-    const filename = guessAttachmentFilename(attachment);
-
-    // If chat is not extracted, show placeholder instead of trying to load
-    if (!isChatExtracted) {
-      const icon = attachment.mime_type?.startsWith('image/') ? '🖼️' :
-                   attachment.mime_type?.startsWith('video/') ? '🎬' :
-                   attachment.mime_type?.startsWith('audio/') ? '🎵' : '📄';
-      return (
-        <div className="attachment-placeholder">
-          <span className="attachment-icon">{icon}</span>
-          <span className="attachment-name">{filename}</span>
-          <span className="attachment-size">
-            {attachment.size_bytes ? `${(attachment.size_bytes / 1024 / 1024).toFixed(1)} MB` : ''}
-          </span>
-          <span className="attachment-hint">Extract files to view</span>
-        </div>
-      );
-    }
-
-    if (attachment.mime_type?.startsWith('image/')) {
-      return (
-        <div className="attachment-image-wrapper">
-          <AttachmentImage
-            relativePath={attachment.relative_path}
-            filename={filename}
-            mimeType={attachment.mime_type}
-          />
-        </div>
-      );
-    }
-
-    if (attachment.mime_type?.startsWith('video/')) {
-      return (
-        <AttachmentMedia
-          relativePath={attachment.relative_path}
-          mimeType={attachment.mime_type}
-          kind="video"
-          filename={filename}
-        />
-      );
-    }
-
-    if (attachment.mime_type?.startsWith('audio/')) {
-      return (
-        <AttachmentMedia
-          relativePath={attachment.relative_path}
-          mimeType={attachment.mime_type}
-          kind="audio"
-          filename={filename}
-        />
-      );
-    }
-
-    return (
-      <div className="attachment-file">
-        <span className="attachment-icon">📄</span>
-        <span className="attachment-name">{filename}</span>
-        <span className="attachment-size">
-          {attachment.size_bytes ? `${(attachment.size_bytes / 1024 / 1024).toFixed(1)} MB` : ''}
-        </span>
-        <button
-          className="attachment-download-btn-small"
-          onClick={() => handleDownloadAttachment(attachment.relative_path ?? '', filename)}
-        >
-          ⬇️
-        </button>
-      </div>
-    );
   };
 
   return (
@@ -1462,7 +914,13 @@ export function Explorer({ apiToken, backup, sessionToken, onSessionToken }: Exp
                                     key={attachment.relative_path ?? attachment.file_id ?? String(attIndex)}
                                     className="attachment-inline"
                                   >
-                                    {renderAttachment(attachment)}
+                                    <Attachment
+                                      attachment={attachment}
+                                      extracted={isChatExtracted}
+                                      loadBlob={waLoadBlob}
+                                      onPreview={setPreviewImage}
+                                      onDownload={handleDownloadAttachment}
+                                    />
                                   </div>
                                 ))}
                               </div>
@@ -1648,7 +1106,13 @@ export function Explorer({ apiToken, backup, sessionToken, onSessionToken }: Exp
                                     key={attachment.relative_path ?? attachment.file_id ?? String(attIndex)}
                                     className="attachment-inline"
                                   >
-                                    {renderMessageAttachment(attachment)}
+                                    <Attachment
+                                      attachment={attachment}
+                                      extracted={isConversationExtracted}
+                                      loadBlob={msgLoadBlob}
+                                      onPreview={setPreviewImage}
+                                      onDownload={handleDownloadMessageAttachment}
+                                    />
                                   </div>
                                 ))}
                               </div>
