@@ -265,6 +265,21 @@ export const api = {
     request<{ items: SafariVisit[] }>(`/backups/${backupId}/artifacts/safari`, 'GET', {
       token,
     }),
+  downloadPhotoFile: async (backupId: string, relativePath: string, token: string, sessionToken?: string) => {
+    const urlString = apiUrl(`/backups/${backupId}/artifacts/photos/file`, { relative_path: relativePath });
+    const response = await fetch(urlString, {
+      method: 'GET',
+      headers: {
+        'X-API-Token': token,
+        ...(sessionToken ? { 'X-Backup-Session': sessionToken } : {}),
+      },
+    });
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(errorText || `Download failed (${response.status})`);
+    }
+    return response;
+  },
   search: (backupId: string, query: string, token: string) =>
     request<SearchResponse>(`/backups/${backupId}/search`, 'GET', {
       token,

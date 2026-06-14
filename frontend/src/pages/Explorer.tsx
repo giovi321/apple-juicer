@@ -1665,7 +1665,9 @@ export function Explorer({ apiToken, backup, sessionToken, onSessionToken }: Exp
           </div>
         )}
 
-        {activeModule === 'photos' && <PhotosTab apiToken={apiToken} backupId={backup.id} />}
+        {activeModule === 'photos' && (
+          <PhotosTab apiToken={apiToken} backupId={backup.id} sessionToken={sessionToken} />
+        )}
 
         {activeModule === 'notes' && <NotesTab apiToken={apiToken} backupId={backup.id} />}
 

@@ -1,17 +1,24 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Header
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api import schemas
-from api.dependencies import get_backup_registry, get_db_session
-from api.routes._common import get_backup_or_404, get_decrypted_backup
+from api.dependencies import get_backup_registry, get_db_session, get_unlock_manager
+from api.routes._common import (
+    download_attachment_response,
+    get_backup_or_404,
+    get_decrypted_backup,
+    resolve_filesystem,
+)
 from api.security import require_api_token
 from core.db.artifacts import PhotoAsset
-from core.services import BackupRegistry
+from core.services import BackupRegistry, UnlockManager
 
 router = APIRouter(prefix="/backups", tags=["photos"], dependencies=[Depends(require_api_token)])
+
+PHOTO_FALLBACK_DOMAINS = ["CameraRollDomain", "MediaDomain"]
 
 
 def _serialize(photo: PhotoAsset) -> schemas.PhotoAssetModel:
@@ -51,3 +58,24 @@ async def list_photos(
         .offset(offset)
     )
     return schemas.PhotoListResponse(items=[_serialize(photo) for photo in result])
+
+
+@router.get("/{backup_id}/artifacts/photos/file")
+async def download_photo(
+    backup_id: str,
+    relative_path: str,
+    registry: BackupRegistry = Depends(get_backup_registry),
+    unlock_mgr: UnlockManager = Depends(get_unlock_manager),
+    session_token: str | None = Header(None, alias="X-Backup-Session"),
+):
+    """Stream a photo's image file, extracting it from the backup on demand."""
+    backup = await get_decrypted_backup(backup_id, registry)
+    fs = resolve_filesystem(backup, backup_id, session_token, unlock_mgr)
+    return download_attachment_response(
+        fs,
+        relative_path,
+        fallback_domains=PHOTO_FALLBACK_DOMAINS,
+        strip_tilde=False,
+        session_present=bool(session_token),
+        label="photo",
+    )
