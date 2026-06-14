@@ -7,10 +7,12 @@ A full-stack web application for extracting and analyzing data from iOS (Finder/
 
 - **Backup Discovery** - Automatically discover and index iOS backups
 - **Decryption** - Decrypt encrypted backups in the background (the UI stays responsive and polls for completion)
-- **Artifact Parsing** - Extract and browse WhatsApp, Messages, Photos, Notes, Calendar, Contacts, Call history, and Safari history
+- **Artifact Parsing** - Extract and browse WhatsApp, Messages (iMessage/SMS), Photos, Notes, Calendar, Contacts, Call history, Safari history, Significant Locations, and Voicemail
 - **Photo viewer** - View and download the actual images, not just metadata
-- **Global search** - Search across every indexed artifact type at once
-- **CSV export** - Export the tabular views (Photos, Calls, Safari, Contacts) to CSV
+- **Unified timeline** - A cross-artifact chronological view that merges messages, photos, calls and more into one stream
+- **Global search** - Search across every indexed artifact type at once, with deep links into the originating conversation
+- **CSV export** - Export the tabular artifact views (Photos, Notes, Calendar, Contacts, Calls, Safari, Locations, Voicemail) to CSV
+- **PDF report** - Generate a per-backup summary report
 - **Modern UI** - Clean, responsive interface built with React and Vite
 - **Docker Ready** - Deploy with a single command using Docker Compose
 
