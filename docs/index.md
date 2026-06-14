@@ -11,10 +11,12 @@ Apple Juicer is a full-stack web application that lets investigators, DFIR speci
 
 1. **Backup Discovery** - Automatically discover iOS backups from configured directories
 2. **Persistent Decryption** - Decrypt encrypted backups once and store decrypted data server-side
-3. **Artifact Parsing** - Extract and index WhatsApp, Messages, Photos, Notes, Calendar, and Contacts
-4. **Advanced Search** - Search through manifest files, chats, and messages with filtering
-5. **Modern UI** - Responsive interface with lazy loading, search, and sorting capabilities
-6. **Docker Deployment** - Deploy all services with a single Docker Compose command
+3. **Artifact Parsing** - Extract and index WhatsApp, Messages (iMessage/SMS), Photos, Notes, Calendar, Contacts, Call history, Safari history, Significant Locations, and Voicemail
+4. **Global Search** - Search across every indexed artifact type at once, with deep links into the originating conversation
+5. **Unified Timeline** - A cross-artifact chronological view that merges messages, photos, calls and more into one stream
+6. **Export & Reporting** - CSV export of the tabular artifact views and a per-backup PDF summary report
+7. **Modern UI** - Responsive interface with lazy loading, search, and sorting capabilities
+8. **Docker Deployment** - Deploy all services with a single Docker Compose command
 
 ## New Features (v0.1.0)
 
