@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { api, type ContactRecord } from '../../lib/api';
+import { downloadCsv } from '../../lib/csv';
 import '../../styles/ArtifactTabs.css';
 
 function displayName(c: ContactRecord): string {
@@ -39,9 +40,21 @@ export function ContactsTab({ apiToken, backupId }: { apiToken: string; backupId
   if (error) return <div className="error-message">{error}</div>;
   if (!items.length) return <div className="no-results">No contacts found in this backup.</div>;
 
+  const exportCsv = () =>
+    downloadCsv(
+      'contacts.csv',
+      ['First name', 'Last name', 'Company', 'Emails', 'Phones'],
+      items.map((c) => [c.first_name, c.last_name, c.company, c.emails.join('; '), c.phones.join('; ')]),
+    );
+
   return (
     <div className="artifact-tab">
-      <div className="artifact-count">{items.length} contacts</div>
+      <div className="artifact-toolbar">
+        <span className="artifact-count">{items.length} contacts</span>
+        <button className="download-btn" onClick={exportCsv}>
+          Download CSV
+        </button>
+      </div>
       <div className="artifact-cards">
         {items.map((c, i) => (
           <div key={c.contact_identifier ?? i} className="artifact-card">

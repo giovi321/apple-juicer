@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { api, type SafariVisit } from '../../lib/api';
+import { downloadCsv } from '../../lib/csv';
 import '../../styles/ArtifactTabs.css';
 
 export function SafariTab({ apiToken, backupId }: { apiToken: string; backupId: string }) {
@@ -34,9 +35,21 @@ export function SafariTab({ apiToken, backupId }: { apiToken: string; backupId: 
   if (error) return <div className="error-message">{error}</div>;
   if (!items.length) return <div className="no-results">No Safari history found in this backup.</div>;
 
+  const exportCsv = () =>
+    downloadCsv(
+      'safari-history.csv',
+      ['Title', 'URL', 'Visited', 'Visit count'],
+      items.map((v) => [v.title, v.url, v.visited_at, v.visit_count]),
+    );
+
   return (
     <div className="artifact-tab">
-      <div className="artifact-count">{items.length} visits</div>
+      <div className="artifact-toolbar">
+        <span className="artifact-count">{items.length} visits</span>
+        <button className="download-btn" onClick={exportCsv}>
+          Download CSV
+        </button>
+      </div>
       <div className="artifact-scroll">
         <table className="artifact-table">
           <thead>

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { api, type PhotoAsset } from '../../lib/api';
+import { downloadCsv } from '../../lib/csv';
 import '../../styles/ArtifactTabs.css';
 
 export function PhotosTab({ apiToken, backupId }: { apiToken: string; backupId: string }) {
@@ -34,9 +35,21 @@ export function PhotosTab({ apiToken, backupId }: { apiToken: string; backupId: 
   if (error) return <div className="error-message">{error}</div>;
   if (!items.length) return <div className="no-results">No photos found in this backup.</div>;
 
+  const exportCsv = () =>
+    downloadCsv(
+      'photos.csv',
+      ['Filename', 'Taken', 'Type', 'Width', 'Height', 'Relative path'],
+      items.map((p) => [p.original_filename, p.taken_at, p.media_type, p.width, p.height, p.relative_path]),
+    );
+
   return (
     <div className="artifact-tab">
-      <div className="artifact-count">{items.length} photos</div>
+      <div className="artifact-toolbar">
+        <span className="artifact-count">{items.length} photos</span>
+        <button className="download-btn" onClick={exportCsv}>
+          Download CSV
+        </button>
+      </div>
       <div className="artifact-scroll">
         <table className="artifact-table">
           <thead>

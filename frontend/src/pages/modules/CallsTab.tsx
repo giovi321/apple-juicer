@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { api, type CallRecord } from '../../lib/api';
+import { downloadCsv } from '../../lib/csv';
 import '../../styles/ArtifactTabs.css';
 
 function formatDuration(seconds?: number | null): string {
@@ -46,9 +47,21 @@ export function CallsTab({ apiToken, backupId }: { apiToken: string; backupId: s
   if (error) return <div className="error-message">{error}</div>;
   if (!items.length) return <div className="no-results">No call history found in this backup.</div>;
 
+  const exportCsv = () =>
+    downloadCsv(
+      'calls.csv',
+      ['Direction', 'Contact', 'Address', 'When', 'Duration (s)', 'Service'],
+      items.map((c) => [callLabel(c), c.display_name, c.address, c.occurred_at, c.duration_seconds, c.service]),
+    );
+
   return (
     <div className="artifact-tab">
-      <div className="artifact-count">{items.length} calls</div>
+      <div className="artifact-toolbar">
+        <span className="artifact-count">{items.length} calls</span>
+        <button className="download-btn" onClick={exportCsv}>
+          Download CSV
+        </button>
+      </div>
       <div className="artifact-scroll">
         <table className="artifact-table">
           <thead>
